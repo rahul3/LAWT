@@ -770,3 +770,37 @@ class MatrixPowers(Generator):
                 return -1.0, -1.0, -1.0, 0.0
         e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
         return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
+    
+
+class MatrixCube(Generator):
+    def __init__(self, params):
+        super().__init__(params)
+
+    def generate(self, rng, gaussian, output_limit=-1.0, type=None):
+        if self.rectangular:
+            return None
+        if self.force_dim:
+            dim = self.first_dimension
+            dim2 = self.second_dimension
+        else:
+            dim = rng.randint(self.min_dimension, self.max_dimension + 1)
+            dim2 = rng.randint(self.min_dimension, self.max_dimension + 1) if self.rectangular else dim
+        max_coeff = rng.randint(self.min_input_coeff, self.max_input_coeff + 1)
+        matrix = self.rand_matrix(rng, dim, dim2, gaussian, max_coeff)
+        result = matrix @ matrix @ matrix  # cube
+        if output_limit >= 0.0:
+            max_coeff_y = np.max(np.abs(result))
+            if max_coeff_y >= output_limit:
+                return None
+        return matrix, result
+    
+    def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
+        m = hyp - tgt
+        s = tgt
+        if np.max(np.abs(s)) == 0.0:
+            if np.max(np.abs(m)) == 0.0:
+                return 0.0, 0.0, 0.0, 1.0
+            else:
+                return -1.0, -1.0, -1.0, 0.0
+        e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
+        return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e

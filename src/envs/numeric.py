@@ -129,6 +129,8 @@ class NumericEnvironment(object):
             self.generator = generators.CoTraining(params)
         elif self.operation == "matrix_exponential":
             self.generator = generators.MatrixExponential(params)
+        elif self.operation == "matrix_cube":
+            self.generator = generators.MatrixCube(params)
         else:
             logger.error(f"Unknown operation {self.operation}")
 
