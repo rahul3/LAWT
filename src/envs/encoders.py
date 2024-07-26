@@ -30,6 +30,19 @@ class Encoder(ABC):
         pass
 
     def encode(self, matrix):
+        """
+        Encode a matrix
+        
+        Example:
+        For the positional encoder:
+        >>> env = NumericEnvironment(params)
+        >>> matrix = np.random.randn(2,3)
+        >>> matrix
+        array([[-0.86939421, -0.54711437,  1.28583033],
+            [ 0.22848608, -0.45579835,  1.23640795]])
+        >>> env.input_encoder.encode(matrix)
+        ['V2', 'V3', '-', '869', 'E-3', '-', '547', 'E-3', '+', '129', 'E-2', '+', '228', 'E-3', '-', '456', 'E-3', '+', '124', 'E-2']
+        """
         lst = []
         l, c = np.shape(matrix)
         lst.append("V" + str(l))
@@ -40,6 +53,24 @@ class Encoder(ABC):
         return lst
 
     def decode(self, lst):
+        """
+        Decode a matrix
+
+        Example:
+        For the positional encoder:
+        >>> env = NumericEnvironment(params)
+        >>> matrix
+        array([[-0.86939421, -0.54711437,  1.28583033],
+            [ 0.22848608, -0.45579835,  1.23640795]])
+        >>> env.input_encoder.encode(matrix)
+        ['V2', 'V3', '-', '869', 'E-3', '-', '547', 'E-3', '+', '129', 'E-2', '+', '228', 'E-3', '-', '456', 'E-3', '+', '124', 'E-2']
+        >>> encoded_matrix = env.input_encoder.encode(matrix)
+        >>> encoded_matrix = env.input_encoder.encode(matrix)
+        KeyboardInterrupt
+        >>> env.input_encoder.decode(encoded_matrix)
+        array([[-0.869, -0.547,  1.29 ],
+            [ 0.228, -0.456,  1.24 ]])
+        """
         if len(lst) < 2 or lst[0][0] != "V" or lst[1][0] != "V":
             return None
         nr_lines = int(lst[0][1:])
@@ -164,6 +195,18 @@ class Positional(Encoder):
         self.output_length = 5 if base_int == 10 else 3
 
     def gobble_int(self, lst):
+        """
+        Takes in a list of strings.
+        Uses self.base to multiply the current value and add the next digit.
+
+        Example, for the PositionalEncoder with base 1000: gobble_int(["1", "2", "3"]) = 
+        Step 0:
+        0 * 1000 + 1 = 1
+        Step 1:
+        (1 * 1000) + 2 = 1002
+        Step 2:
+        1002 * 1000 + 3 = 1002003
+        """
         res = 0
         i = 0
         for x in lst:
