@@ -180,6 +180,18 @@ class NumericEnvironment(object):
             logger.info(f"words: {self.word2id}")
 
     def input_to_infix(self, lst):
+        """
+        Convert the encoded input sequence to an infix expression.
+        
+        Example (for the Positional Encoder):
+        >>> matrix
+        array([[-0.86939421, -0.54711437,  1.28583033],
+            [ 0.22848608, -0.45579835,  1.23640795]])
+        >>> encoded_matrix
+        ['V2', 'V3', '-', '869', 'E-3', '-', '547', 'E-3', '+', '129', 'E-2', '+', '228', 'E-3', '-', '456', 'E-3', '+', '124', 'E-2']
+        >>> env.input_to_infix(encoded_matrix)
+        '[[-0.869 -0.547  1.29 ]\n [ 0.228 -0.456  1.24 ]]'
+        """
         if self.operation == "cotraining":
             code = lst[0]
             ll = lst[1:]
@@ -195,6 +207,11 @@ class NumericEnvironment(object):
         return res + code 
 
     def output_to_infix(self, lst):
+        """
+        Convert the encoded output sequence to an infix expression.
+        
+        Current implementation is same as input_to_infix method. There is no difference between the two.
+        """
         if self.operation == "cotraining":
             code = lst[0]
             ll = lst[1:]
@@ -214,6 +231,7 @@ class NumericEnvironment(object):
         Generate pairs of matrices and inverses
         Encode this as a prefix sentence
         """
+        # TODO: What happens when you want to test and self.rng is not defined?
         gen = self.generator.generate(self.rng, self.gaussian_coeffs, self.output_encoder.limit, data_type)
         if gen is None:
             return None
@@ -441,3 +459,39 @@ class NumericEnvironment(object):
             "--eval_norm", type=str, default="d1", help="norm to use for evaluation, max, d1 or d2"
         )
 
+
+if __name__ == '__main__':
+    import argparse
+    from utils import bool_flag
+
+    parser = argparse.ArgumentParser()
+    NumericEnvironment.register_args(parser)
+    parser.add_argument('--max_len', type=int, default=100)
+    parser.add_argument('--input_encoding', type=str, default='float,2,1000')
+    parser.add_argument('--output_encoding', type=str, default='float,2,1000')  
+    parser.add_argument('--eval_norm', type=str, default='d1')
+    parser.add_argument('--float_tolerance', type=float, default=0.1)
+    parser.add_argument('--coeff_tolerance', type=float, default=0.01)
+    parser.add_argument('--more_tolerance', type=str, default='')
+    parser.add_argument('--additional_test_distributions', type=str, default='')
+    parser.add_argument('--min_dimension', type=int, default=5)
+    parser.add_argument('--max_dimension', type=int, default=5)
+    parser.add_argument('--rectangular', type=bool_flag, default=False)
+    parser.add_argument('--force_dim', type=bool_flag, default=False)
+    parser.add_argument('--first_dimension', type=int, default=5)
+    parser.add_argument('--second_dimension', type=int, default=5)
+    parser.add_argument('--max_output_len', type=int, default=100)
+    
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--env_base_seed', type=int, default=0)
+    parser.add_argument('--global_rank', type=int, default=0)
+    parser.add_argument('--local_rank', type=int, default=0)
+    parser.add_argument('--batch_load', type=bool_flag, default=False)
+    parser.add_argument('--num_workers', type=int, default=0) 
+    parser.add_argument('--reload_size', type=int, default=-1)
+    parser.add_argument('--n_gpu_per_node', type=int, default=1)
+
+    params=parser.parse_args()
+    print(params)
+
+    env = NumericEnvironment(params)

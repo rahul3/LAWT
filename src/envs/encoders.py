@@ -66,7 +66,6 @@ class Encoder(ABC):
         ['V2', 'V3', '-', '869', 'E-3', '-', '547', 'E-3', '+', '129', 'E-2', '+', '228', 'E-3', '-', '456', 'E-3', '+', '124', 'E-2']
         >>> encoded_matrix = env.input_encoder.encode(matrix)
         >>> encoded_matrix = env.input_encoder.encode(matrix)
-        KeyboardInterrupt
         >>> env.input_encoder.decode(encoded_matrix)
         array([[-0.869, -0.547,  1.29 ],
             [ 0.228, -0.456,  1.24 ]])
@@ -206,6 +205,10 @@ class Positional(Encoder):
         (1 * 1000) + 2 = 1002
         Step 2:
         1002 * 1000 + 3 = 1002003
+        Returns 1002003, 3
+
+        >>> env.input_encoder.gobble_int(['1', '2', '3'])
+        (1002003, 3)
         """
         res = 0
         i = 0
@@ -216,7 +219,18 @@ class Positional(Encoder):
             i += 1
         return res, i
 
-    def write_posint(self, value):
+    def write_posint(self, value) -> list:
+        """
+        Write a positional integer
+        
+        Example:
+
+        >>> env = NumericEnvironment(params)
+        >>> env.input_encoder.gobble_int(['1', '2', '3'])
+        (1002003, 3)
+        >>> env.input_encoder.write_posint(gobbledint[0])
+        ['1', '2', '3']
+        """
         if value == 0:
             return ["0"]
         seq = []
@@ -229,6 +243,14 @@ class Positional(Encoder):
     def write_float(self, value):
         """
         Write a float number
+
+        Example for Positional Encoder:
+        >>> env.input_encoder
+        <src.envs.encoders.Positional object at 0x7f06ccb41d80>
+        >>> env.input_encoder.float_precision
+        2
+        >>> env.input_encoder.write_float(0.23423)
+        ['+', '234', 'E-3']
         """
         precision = self.float_precision
         assert value not in [-np.inf, np.inf]
