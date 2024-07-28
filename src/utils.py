@@ -9,6 +9,7 @@ import re
 import sys
 import math
 import time
+import torch
 import pickle
 import random
 import getpass
@@ -27,6 +28,7 @@ TRUTHY_STRINGS = {'on', 'true', '1'}
 
 DUMP_PATH = '/checkpoint/%s/dumped' % getpass.getuser()
 CUDA = True
+METALS = False
 
 
 class AttrDict(dict):
@@ -126,9 +128,21 @@ def to_cuda(*args):
     """
     Move tensors to CUDA.
     """
-    if not CUDA:
+    if not CUDA and not METALS:
         return args
-    return [None if x is None else x.cuda() for x in args]
+    if CUDA:
+        return [None if x is None else x.cuda() for x in args]
+    elif METALS:
+        if not torch.backends.mps.is_available():
+            if not torch.backends.mps.is_built():
+                print("MPS not available because the current PyTorch install was not "
+                    "built with MPS enabled.")
+            else:
+                print("MPS not available because the current MacOS version is not 12.3+ "
+                    "and/or you do not have an MPS-enabled device on this machine.")
+        return [None if x is None else x.to(torch.device("mps")) for x in args]
+    else:
+        return args
 
 
 class TimeoutError(BaseException):

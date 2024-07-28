@@ -63,8 +63,12 @@ def build_modules(env, params):
         )
 
     # cuda
-    if not params.cpu:
+    if not params.cpu and not params.metals:
         for v in modules.values():
             v.cuda()
+
+    if params.metals:
+        for v in modules.values():
+            v.to(torch.device("mps"))
 
     return modules
