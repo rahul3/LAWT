@@ -49,6 +49,7 @@ class Adam(optim.Optimizer):
         loss = None
         if closure is not None:
             loss = closure()
+            
 
         for group in self.param_groups:
             for p in group['params']:
@@ -69,8 +70,18 @@ class Adam(optim.Optimizer):
                 #     grad.add_(group['weight_decay'], p.data)
 
                 # Decay the first and second moment running average coefficient
-                exp_avg.mul_(beta1).add_(1 - beta1, grad)
-                exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
+                
+                try:
+                    exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+                except TypeError:
+                    # Fallback for older PyTorch versions
+                    exp_avg.mul_(beta1).add_(1 - beta1, grad)
+                    
+                try:
+                    exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+                except TypeError:
+                    # Fallback for older PyTorch versions
+                    exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
                 denom = exp_avg_sq.sqrt().add_(group['eps'])
                 # denom = exp_avg_sq.sqrt().clamp_(min=group['eps'])
 
@@ -80,8 +91,12 @@ class Adam(optim.Optimizer):
 
                 if group['weight_decay'] != 0:
                     p.data.add_(-group['weight_decay'] * group['lr'], p.data)
-
-                p.data.addcdiv_(-step_size, exp_avg, denom)
+                    
+                try:
+                    p.data.addcdiv_(exp_avg, denom, value=-step_size)
+                except TypeError:
+                    # Fallback for older PyTorch versions
+                    p.data.addcdiv_(-step_size, exp_avg, denom)
 
         return loss
 
@@ -333,7 +348,10 @@ def get_optimizer(parameters, s):
         raise Exception('Unknown optimization method: "%s"' % method)
 
     # check that we give good parameters to the optimizer
-    expected_args = inspect.getargspec(optim_fn.__init__)[0]
+    try:
+        expected_args = inspect.getargspec(optim_fn.__init__)[0]
+    except Exception as e:
+        expected_args = list(inspect.signature(optim_fn.__init__).parameters.keys())
     assert expected_args[:2] == ['self', 'params']
     if not all(k in expected_args[2:] for k in optim_params.keys()):
         raise Exception('Unexpected parameters: expected "%s", got "%s"' % (

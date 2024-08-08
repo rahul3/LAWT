@@ -32,6 +32,52 @@ class InvalidPrefixExpression(Exception):
 
 
 class NumericEnvironment(object):
+    """
+    NumericEnvironment class represents an environment for generating pairs of matrices and their corresponding inverses.
+    It provides methods for encoding and decoding matrices, generating expressions, and evaluating predictions.
+
+    Args:
+        params (argparse.Namespace): An argparse.Namespace object containing the parameters for the environment.
+
+    Attributes:
+        TRAINING_TASKS (set): A set of training tasks supported by the environment.
+        TEST_TASKS (set): A set of test tasks supported by the environment.
+        max_len (int): The maximum length of the input and output sequences.
+        operation (str): The type of operation to perform on the matrices.
+        input_encoding (str): The encoding scheme for the input matrices.
+        output_encoding (str): The encoding scheme for the output matrices.
+        gaussian_coeffs (bool): A flag indicating whether to use Gaussian coefficients for generating matrices.
+        eval_norm (str): The norm to use for evaluating predictions.
+        float_tolerance (float): The tolerance for comparing floating-point numbers.
+        coeff_tolerance (float): The tolerance for comparing matrix coefficients.
+        additional_tolerance (list): A list of additional tolerances for comparing matrix coefficients.
+        test_sets (list): A list of additional test distributions.
+        generator (object): The generator object for generating matrices.
+        output_encoder (object): The encoder object for encoding output matrices.
+        input_encoder (object): The encoder object for encoding input matrices.
+        max_output_length (int): The maximum length of the output sequence.
+        max_input_coeff (float): The maximum value of the input matrix coefficients.
+        noisy_input (bool): A flag indicating whether to add noise to the input matrices.
+        sigma (float): The standard deviation of the noise to be added to the input matrices.
+        common_symbols (list): A list of common symbols used in the vocabulary.
+        words (list): The vocabulary of the environment.
+        id2word (dict): A dictionary mapping word indices to words.
+        word2id (dict): A dictionary mapping words to word indices.
+        n_words (int): The number of words in the vocabulary.
+        eos_index (int): The index of the end-of-sequence token in the vocabulary.
+        pad_index (int): The index of the padding token in the vocabulary.
+
+    Methods:
+        input_to_infix(lst): Converts the input sequence to an infix expression.
+        output_to_infix(lst): Converts the output sequence to an infix expression.
+        gen_expr(data_type, task, train): Generates pairs of matrices and inverses.
+        decode_class(i): Decodes the class label into a string representation.
+        code_class(xi, yi): Encodes the class label for a pair of matrices.
+        check_prediction(src, tgt, hyp): Checks the prediction against the target and returns the evaluation metrics.
+        create_train_iterator(task, data_path, params): Creates a train iterator for the environment.
+        create_test_iterator(data_type, task, data_path, batch_size, params, size): Creates a test iterator for the environment.
+        register_args(parser): Registers environment parameters with the argument parser.
+    """
 
     TRAINING_TASKS = {"numeric"}
     TEST_TASKS = {"numeric"}
@@ -81,6 +127,20 @@ class NumericEnvironment(object):
             self.generator = generators.TransposeMatrix(params)
         elif self.operation == "cotraining":
             self.generator = generators.CoTraining(params)
+        elif self.operation == "matrix_exponential":
+            self.generator = generators.MatrixExponential(params)
+        elif self.operation == "matrix_cube":
+            self.generator = generators.MatrixCube(params)
+        elif self.operation == "matrix_logarithm":
+            self.generator = generators.MatrixLogarithm(params)
+        elif self.operation == "matrix_sign":
+            self.generator = generators.MatrixSign(params)
+        elif self.operation == "matrix_sine":
+            self.generator = generators.MatrixSine(params)
+        elif self.operation == "matrix_cosine":
+            self.generator = generators.MatrixCosine(params)
+        elif self.operation == "matrix_fractional_power":
+            self.generator = generators.MatrixCosine(params)
         else:
             logger.error(f"Unknown operation {self.operation}")
 
@@ -130,6 +190,18 @@ class NumericEnvironment(object):
             logger.info(f"words: {self.word2id}")
 
     def input_to_infix(self, lst):
+        """
+        Convert the encoded input sequence to an infix expression.
+        
+        Example (for the Positional Encoder):
+        >>> matrix
+        array([[-0.86939421, -0.54711437,  1.28583033],
+            [ 0.22848608, -0.45579835,  1.23640795]])
+        >>> encoded_matrix
+        ['V2', 'V3', '-', '869', 'E-3', '-', '547', 'E-3', '+', '129', 'E-2', '+', '228', 'E-3', '-', '456', 'E-3', '+', '124', 'E-2']
+        >>> env.input_to_infix(encoded_matrix)
+        '[[-0.869 -0.547  1.29 ]\n [ 0.228 -0.456  1.24 ]]'
+        """
         if self.operation == "cotraining":
             code = lst[0]
             ll = lst[1:]
@@ -145,6 +217,11 @@ class NumericEnvironment(object):
         return res + code 
 
     def output_to_infix(self, lst):
+        """
+        Convert the encoded output sequence to an infix expression.
+        
+        Current implementation is same as input_to_infix method. There is no difference between the two.
+        """
         if self.operation == "cotraining":
             code = lst[0]
             ll = lst[1:]
@@ -164,6 +241,7 @@ class NumericEnvironment(object):
         Generate pairs of matrices and inverses
         Encode this as a prefix sentence
         """
+        # TODO: What happens when you want to test and self.rng is not defined?
         gen = self.generator.generate(self.rng, self.gaussian_coeffs, self.output_encoder.limit, data_type)
         if gen is None:
             return None
@@ -389,5 +467,10 @@ class NumericEnvironment(object):
         )
         parser.add_argument(
             "--eval_norm", type=str, default="d1", help="norm to use for evaluation, max, d1 or d2"
+        )
+
+        # functions of matrices parameters
+        parser.add_argument(
+            "--p", type=float, default=0.5, help="For matrix fractional power"
         )
 
