@@ -348,7 +348,10 @@ def get_optimizer(parameters, s):
         raise Exception('Unknown optimization method: "%s"' % method)
 
     # check that we give good parameters to the optimizer
-    expected_args = inspect.getargspec(optim_fn.__init__)[0]
+    try:
+        expected_args = inspect.getargspec(optim_fn.__init__)[0]
+    except Exception as e:
+        expected_args = list(inspect.signature(optim_fn.__init__).parameters.keys())
     assert expected_args[:2] == ['self', 'params']
     if not all(k in expected_args[2:] for k in optim_params.keys()):
         raise Exception('Unexpected parameters: expected "%s", got "%s"' % (

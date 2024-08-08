@@ -186,7 +186,10 @@ class Trainer(object):
             and params.fp16 is True
         )
         mod_names = sorted(self.modules.keys())
-        self.scaler = torch.cuda.amp.GradScaler()
+        try:
+            self.scaler = torch.amp.GradScaler('cuda')
+        except AttributeError:
+            self.scaler = torch.cuda.amp.GradScaler()
 
     def optimize(self, loss):
         """
@@ -499,6 +502,10 @@ class Trainer(object):
                 "predict", tensor=decoded, pred_mask=pred_mask, y=y, get_scores=False
             )
         else:
+            try:
+                autocast = torch.amp.autocast('cuda')
+            except AttributeError:
+                autocast = torch.cuda.amp.autocast()
             with torch.cuda.amp.autocast():
                 encoded = encoder("fwd", x=x1, lengths=len1, causal=False)
                 decoded = decoder(

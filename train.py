@@ -168,6 +168,10 @@ def get_parser():
     parser.add_argument("--windows", type=bool_flag, default=False,
                         help="Windows version (no multiprocessing for eval)")
     
+    # Metals support
+    parser.add_argument("--metals", type=bool_flag, default=False,
+                        help="Use Metals")
+    
     return parser
 
 
@@ -183,9 +187,15 @@ def main(params):
     # CPU / CUDA
     if params.cpu:
         assert not params.multi_gpu
+    elif params.metals:
+       if torch.backends.mps.is_available(): 
+            mps_device = torch.device("mps")
+            x = torch.ones(1, device=mps_device)
+            print (x)
     else:
         assert torch.cuda.is_available()
-    src.utils.CUDA = not params.cpu
+    src.utils.CUDA = not params.cpu and not params.metals
+    src.utils.METALS = params.metals
 
     # build environment / modules / trainer / evaluator
     env = build_env(params)
