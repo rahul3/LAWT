@@ -474,39 +474,3 @@ class NumericEnvironment(object):
             "--p", type=float, default=0.5, help="For matrix fractional power"
         )
 
-
-if __name__ == '__main__':
-    import argparse
-    from utils import bool_flag
-
-    parser = argparse.ArgumentParser()
-    NumericEnvironment.register_args(parser)
-    parser.add_argument('--max_len', type=int, default=100)
-    parser.add_argument('--input_encoding', type=str, default='float,2,1000')
-    parser.add_argument('--output_encoding', type=str, default='float,2,1000')  
-    parser.add_argument('--eval_norm', type=str, default='d1')
-    parser.add_argument('--float_tolerance', type=float, default=0.1)
-    parser.add_argument('--coeff_tolerance', type=float, default=0.01)
-    parser.add_argument('--more_tolerance', type=str, default='')
-    parser.add_argument('--additional_test_distributions', type=str, default='')
-    parser.add_argument('--min_dimension', type=int, default=5)
-    parser.add_argument('--max_dimension', type=int, default=5)
-    parser.add_argument('--rectangular', type=bool_flag, default=False)
-    parser.add_argument('--force_dim', type=bool_flag, default=False)
-    parser.add_argument('--first_dimension', type=int, default=5)
-    parser.add_argument('--second_dimension', type=int, default=5)
-    parser.add_argument('--max_output_len', type=int, default=100)
-    
-    parser.add_argument('--batch_size', type=int, default=64)
-    parser.add_argument('--env_base_seed', type=int, default=0)
-    parser.add_argument('--global_rank', type=int, default=0)
-    parser.add_argument('--local_rank', type=int, default=0)
-    parser.add_argument('--batch_load', type=bool_flag, default=False)
-    parser.add_argument('--num_workers', type=int, default=0) 
-    parser.add_argument('--reload_size', type=int, default=-1)
-    parser.add_argument('--n_gpu_per_node', type=int, default=1)
-
-    params=parser.parse_args()
-    print(params)
-
-    env = NumericEnvironment(params)
