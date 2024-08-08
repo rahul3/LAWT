@@ -131,6 +131,16 @@ class NumericEnvironment(object):
             self.generator = generators.MatrixExponential(params)
         elif self.operation == "matrix_cube":
             self.generator = generators.MatrixCube(params)
+        elif self.operation == "matrix_logarithm":
+            self.generator = generators.MatrixLogarithm(params)
+        elif self.operation == "matrix_sign":
+            self.generator = generators.MatrixSign(params)
+        elif self.operation == "matrix_sine":
+            self.generator = generators.MatrixSine(params)
+        elif self.operation == "matrix_cosine":
+            self.generator = generators.MatrixCosine(params)
+        elif self.operation == "matrix_fractional_power":
+            self.generator = generators.MatrixCosine(params)
         else:
             logger.error(f"Unknown operation {self.operation}")
 
@@ -457,6 +467,11 @@ class NumericEnvironment(object):
         )
         parser.add_argument(
             "--eval_norm", type=str, default="d1", help="norm to use for evaluation, max, d1 or d2"
+        )
+
+        # functions of matrices parameters
+        parser.add_argument(
+            "--p", type=float, default=0.5, help="For matrix fractional power"
         )
 
 

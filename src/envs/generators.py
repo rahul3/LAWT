@@ -10,6 +10,8 @@ import scipy
 import math
 from logging import getLogger
 
+import scipy.linalg
+
 logger = getLogger()
 
 
@@ -179,26 +181,6 @@ class TransposeMatrix(Generator):
         return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
 
 
-class MatrixExponential(Generator):
-    
-    def __init__(self, params):
-        super().__init__(params)
-        
-    def generate(self, rng, gaussian, output_limit=-1.0, type=None):
-        matrix = self.gen_matrix(rng, gaussian)
-        result = scipy.linalg.expm(matrix)
-        if output_limit >= 0.0:
-            max_coeff_y = np.max(np.abs(result))
-            if max_coeff_y >= output_limit:
-                return None
-        return matrix, result
-    
-    
-    def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
-        m = hyp - tgt
-        s = tgt
-        e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
-        return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
 
 
 class InvertMatrix(Generator):
@@ -701,76 +683,6 @@ class CoTraining(Generator):
     def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
         return self.subgen[code].evaluate(src, tgt, hyp, prec)
     
-    
-    
-    
-class MatrixPowers(Generator):
-    def __init__(self, params):
-        super().__init__(params)
-        self.eigen_distribution = params.eigen_distribution.split(',')
-        self.eigen_test_distribution = params.eigen_test_distribution.split(',')
-        assert len(self.eigen_distribution) > 0 and len(self.eigen_distribution) <= 5
-        assert len(self.eigen_test_distribution) > 0 and len(self.eigen_test_distribution) <= 5
-        self.test_sets = params.additional_test_distributions.split(';')
-        self.test_distribs = {}
-        for v in self.test_sets:
-            self.test_distribs[v] = v.split(',')
-            assert len(self.test_distribs[v]) > 0 and len(self.test_distribs[v]) <= 5
-
-
-    def generate(self, rng, gaussian, output_limit=-1.0, type=None):
-        dim = rng.randint(self.min_dimension, self.max_dimension + 1)
-        max_coeff = rng.randint(self.min_input_coeff, self.max_input_coeff + 1)
-        a = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
-        matrix = np.tril(a) + np.tril(a, -1).T
-
-        dist = []
-        if type is "train":
-            dist = self.eigen_distribution
-        elif type == "valid":
-            dist = self.eigen_test_distribution
-        else:
-            dist = self.test_distribs[type]
-        distrib = rng.choice(dist)
-        if distrib in ["positive", "uniform", "gaussian", "laplace","positive2"]:
-            val, vec = np.linalg.eigh(matrix)
-            sigma = math.sqrt(dim) * max_coeff / math.sqrt(3.0)
-            if distrib == "positive":
-                val = np.abs(val)
-            elif distrib == "uniform":
-                val = sigma * math.sqrt(3.0) * (2 * rng.rand(dim) - 1)
-            elif distrib == "gaussian":
-                val = sigma * rng.randn(dim)
-            elif distrib == "laplace":
-                val = rng.laplace(0, sigma / math.sqrt(2.0), dim)
-            elif distrib == "positive2":
-                val = np.abs(rng.laplace(0, sigma / math.sqrt(2.0), dim))           
-            matrix = vec.T @ np.diag(val) @ vec 
-        elif distrib ==  "marcenko":
-            m1 = self.rand_matrix(rng, dim, dim, gaussian, math.sqrt(max_coeff))
-            matrix = m1.T @ m1
-
-        val, vec = np.linalg.eigh(matrix)
-        result = np.vstack((val, vec))
-
-        if output_limit >= 0.0:
-            max_coeff_y = np.max(np.abs(result))
-            if max_coeff_y >= output_limit:
-                return None
-        return matrix, result
-
-    def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
-        s = np.diag(hyp[0])
-        vec = hyp[1:]
-        m = (vec.T @ src @ vec) - s
-        if np.max(np.abs(s)) == 0.0:
-            if np.max(np.abs(m)) == 0.0:
-                return 0.0, 0.0, 0.0, 1.0
-            else:
-                return -1.0, -1.0, -1.0, 0.0
-        e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
-        return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
-    
 
 class MatrixCube(Generator):
     def __init__(self, params):
@@ -804,3 +716,150 @@ class MatrixCube(Generator):
                 return -1.0, -1.0, -1.0, 0.0
         e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
         return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
+
+
+class MatrixExponential(Generator):
+    """ A generator class for generating exponential matrices. """
+    
+    def __init__(self, params):
+        super().__init__(params)
+        
+    def generate(self, rng, gaussian, output_limit=-1.0, type=None):
+        matrix = self.gen_matrix(rng, gaussian)
+        result = scipy.linalg.expm(matrix)
+        if output_limit >= 0.0:
+            max_coeff_y = np.max(np.abs(result))
+            if max_coeff_y >= output_limit:
+                return None
+        return matrix, result
+    
+    
+    def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
+        m = hyp - tgt
+        s = tgt
+        e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
+        return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
+    
+
+class MatrixLogarithm(Generator):
+        """ A generator class for generating logarithm matrices. """
+        
+        def __init__(self, params):
+            super().__init__(params)
+            
+        def generate(self, rng, gaussian, output_limit=-1.0, type=None):
+            matrix = self.gen_matrix(rng, gaussian)
+            result = scipy.linalg.logm(matrix)
+            if output_limit >= 0.0:
+                max_coeff_y = np.max(np.abs(result))
+                if max_coeff_y >= output_limit:
+                    return None
+            return matrix, result
+        
+        
+        def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
+            m = hyp - tgt
+            s = tgt
+            e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
+            return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
+        
+
+class MatrixSign(Generator):
+        """
+        A generator class for generating sign matrices.
+        """
+        
+        def __init__(self, params):
+            super().__init__(params)
+            
+        def generate(self, rng, gaussian, output_limit=-1.0, type=None):
+            matrix = self.gen_matrix(rng, gaussian)
+            result = scipy.linalg.signm(matrix)
+            if output_limit >= 0.0:
+                max_coeff_y = np.max(np.abs(result))
+                if max_coeff_y >= output_limit:
+                    return None
+            return matrix, result
+        
+        
+        def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
+            m = hyp - tgt
+            s = tgt
+            e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
+            return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
+        
+
+class MatrixSine(Generator):
+        """
+        A generator class for generating sine matrices.
+        """
+        
+        def __init__(self, params):
+            super().__init__(params)
+            
+        def generate(self, rng, gaussian, output_limit=-1.0, type=None):
+            matrix = self.gen_matrix(rng, gaussian)
+            result = scipy.linalg.sinm(matrix)
+            if output_limit >= 0.0:
+                max_coeff_y = np.max(np.abs(result))
+                if max_coeff_y >= output_limit:
+                    return None
+            return matrix, result
+        
+        
+        def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
+            m = hyp - tgt
+            s = tgt
+            e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
+            return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
+        
+
+class MatrixCosine(Generator):
+        """
+        A generator class for generating cosine matrices.
+        """
+        
+        def __init__(self, params):
+            super().__init__(params)
+            
+        def generate(self, rng, gaussian, output_limit=-1.0, type=None):
+            matrix = self.gen_matrix(rng, gaussian)
+            result = scipy.linalg.cosm(matrix)
+            if output_limit >= 0.0:
+                max_coeff_y = np.max(np.abs(result))
+                if max_coeff_y >= output_limit:
+                    return None
+            return matrix, result
+        
+        
+        def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
+            m = hyp - tgt
+            s = tgt
+            e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
+            return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
+
+
+class MatrixPthRoot(Generator):
+        """
+        A generator class for generating pth root matrices.
+        """
+        
+        def __init__(self, params):
+            super().__init__(params)
+            self.p = params.p
+            
+        def generate(self, rng, gaussian, output_limit=-1.0, type=None):
+            matrix = self.gen_matrix(rng, gaussian)
+            result = scipy.linalg.fractional_matrix_power(matrix, 1/self.p)
+            if output_limit >= 0.0:
+                max_coeff_y = np.max(np.abs(result))
+                if max_coeff_y >= output_limit:
+                    return None
+            return matrix, result
+        
+        
+        def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
+            m = hyp - tgt
+            s = tgt
+            e = np.sum(np.abs(m) / (np.abs(s) + 1e-12) < prec) / m.size
+            return np.max(np.abs(m)) / np.max(np.abs(s)), np.sum(np.abs(m)) / np.sum(np.abs(s)), np.trace(m.T @ m) / np.trace(s.T @ s), e
