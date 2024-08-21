@@ -726,6 +726,13 @@ class MatrixExponential(Generator):
         
     def generate(self, rng, gaussian, output_limit=-1.0, type=None):
         matrix = self.gen_matrix(rng, gaussian)
+        # Matrix with diagonal from Normal(1, 4)
+        diagonal = self.gen_matrix(rng, gaussian)
+        diagonal = 2 * diagonal + 1
+        diagonal = np.diag(np.diag(diagonal))
+        
+        matrix = np.triu(matrix) + np.triu(matrix, 1).T
+        matrix = matrix - np.diag(np.diag(matrix)) + diagonal
         result = scipy.linalg.expm(matrix)
         if output_limit >= 0.0:
             max_coeff_y = np.max(np.abs(result))
@@ -749,7 +756,7 @@ class MatrixLogarithm(Generator):
             
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
             matrix = self.gen_matrix(rng, gaussian)
-            # Wigner matrix generation TODO: Add a parameter for the distribution
+            # Wigner matrix generation TODO: Add a parameter for the distributions
             # Matrix with diagonal from Normal(1, 4)
             diagonal = self.gen_matrix(rng, gaussian)
             diagonal = 2 * diagonal + 1
