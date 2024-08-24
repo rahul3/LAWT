@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
 import math
 
-from scipy.linalg import expm, hadamard
+from scipy.linalg import expm, hadamard, signm
 import numpy as np
 
 from common import get_logger
@@ -96,7 +96,7 @@ class ExperimentData(Dataset):
                 raise ValueError("Dimension must be a power of 2 for Hadamard matrix")
             h = torch.tensor(hadamard(dim), dtype=torch.float32)
             self.data = h.unsqueeze(0).repeat(n_examples, 1, 1)
-
+            
         if f_type == "scalar" and operation == "exponential":
             self.target = torch.exp(self.data)
         elif f_type == "matrix" and operation == "exponential":
@@ -105,6 +105,10 @@ class ExperimentData(Dataset):
             self.target = self.data ** 2
         elif f_type == "matrix" and operation == "square":
             self.target = self.data @ self.data
+        elif f_type == "scalar" and operation == "sign":
+            self.target = torch.sign(self.data)
+        elif f_type == "matrix" and operation == "sign":
+            self.target = signm(self.data)
         else:
             raise TypeError("Unsupported function type")
 

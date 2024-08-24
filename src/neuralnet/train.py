@@ -23,26 +23,9 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 
+
+
 if __name__ == "__main__":
-    
-    # Logging and save path setup
-    ID = datetime.datetime.strftime(datetime.datetime.now(),'%Y%M%d%s')
-    # Create a directory for saving results
-    save_dir = os.path.join(os.getcwd(), 'matrix_nn_results', ID)
-    os.makedirs(save_dir, exist_ok=True)
-
-    logger_dir = os.path.join(save_dir, "logs")
-    os.makedirs(logger_dir, exist_ok=True)
-    logger_path = os.path.join(logger_dir, f"matrix_{ID}.log")
-
-    logger = get_logger(__name__, level=logging.DEBUG, log_file=logger_path)
-    logger.info(f"Log file saved as: {logger_path}")
-    logger.info(f"Results are going to be saved at: {save_dir}")
-
-    graphs_dir = os.path.join(save_dir, "graphs")
-    os.makedirs(graphs_dir, exist_ok=True)
-    logger.info(f"Graphs are going to be saved at: {graphs_dir}")
-    
     
     class SetDefaultAction(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
@@ -50,9 +33,7 @@ if __name__ == "__main__":
             if self.dest == "dim":
                 setattr(namespace, "bandwidth", min(1, values-1))
     
-    # Check if CUDA is available and set the device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info(f"Using device: {device}")
+
     parser = argparse.ArgumentParser(description="Neural Network Training")
     
     # Add arguments
@@ -68,6 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--loss", type=str, default="frobenius", help="Loss function")
     parser.add_argument("--bandwidth", type=int, default=1, help="Bandwidth")
+    parser.add_argument("--operation", type=str, default="square", help="Operation")
     
     args = parser.parse_args()
     
@@ -82,6 +64,7 @@ if __name__ == "__main__":
     validation_interval = args.validation_interval
     dim = args.dim
     lr = args.lr
+    operation = args.operation
     optional_args = {"bandwidth": 1 or args.bandwidth}
     
     if args.loss == "frobenius":
@@ -93,7 +76,36 @@ if __name__ == "__main__":
     else:
         raise ValueError("Invalid loss function")
     
+    
+    op_to_fn = {"square": "A^2", "exponential": "e^A", "sign": "sign(A)"}
+    
+    
+    ID = datetime.datetime.strftime(datetime.datetime.now(),'%Y%M%d%s')
+    save_dir = os.path.join(os.getcwd(), "experiments", f"{operation}", f"{matrix_type}", f"dim_{dim}", ID)
+    
+    logger_dir = os.path.join(save_dir, "logs")
+    os.makedirs(logger_dir, exist_ok=True)
+    logger_path = os.path.join(logger_dir, f"matrix_{ID}.log")
+    
+    logger = get_logger(__name__, level=logging.DEBUG, log_file=logger_path)
+    logger.info(f"Log file saved as: {logger_path}")
+    logger.info(f"Results are going to be saved at: {save_dir}")
+    
     logger.info(f"Arguments: {args}")
+    
+    # Logging and save path setup
+    logger.info(f"{ID=}")
+    # Create a directory for saving results
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Create a directory for saving graphs
+    graphs_dir = os.path.join(save_dir, "graphs")
+    os.makedirs(graphs_dir, exist_ok=True)
+    logger.info(f"Graphs are going to be saved at: {graphs_dir}")
+    
+    # Check if CUDA is available and set the device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
     
     # Model and optimizer setup
     input_size = dim ** 2
@@ -113,7 +125,7 @@ if __name__ == "__main__":
                                 matrix_type=matrix_type,
                                 coeff_upper=None,
                                 f_type='matrix',
-                                operation="square",
+                                operation=operation,
                                 **optional_args)
 
     # Define the sizes of your train, validation, and test sets
@@ -128,7 +140,6 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-    
     
     # Training loop
     training_examples = []
@@ -154,14 +165,17 @@ if __name__ == "__main__":
         
         # Validation step
         if (epoch + 1) % validation_interval == 0:
+            logger.info(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_idx+1}/{len(train_loader)}: Current Batch Loss: {loss.item():.4f}")
             model.eval()
+            logger.info("*" * 50)
             val_loss = 0
             with torch.no_grad():
-                for x, y in val_loader:
+                for val_idx, (x, y) in enumerate(val_loader):
                     A_tensor = x.view(x.size(0), -1).to(device)
                     A_exp_tensor = y.view(y.size(0), -1).to(device)
                     val_output = model(A_tensor)
                     val_loss += criterion(val_output, A_exp_tensor).item()
+                    # logger.info(f"Validation: Batch {val_idx+1}/{len(val_loader)}: Current Validation Batch Loss: {criterion(val_output, A_exp_tensor).item():.4f}, Cumulative Validation Loss: {val_loss:.4f}")
             
             val_loss /= len(val_loader)
             val_losses.append(val_loss)
@@ -171,9 +185,15 @@ if __name__ == "__main__":
             
             # print(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {loss.item():.4f}, Val Loss: {val_loss:.4f}')
             logger.info(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {log_loss(loss.item()):.4f}, Val Loss: {log_loss(val_loss):.4f}')
+            logger.info("*" * 50)
             
-            
-    training_val_loss(training_examples, val_losses, save_path=graphs_dir)
+    training_val_loss(training_examples, val_losses, save_path=os.path.join(graphs_dir, "training_val_loss.png"), title=f"{op_to_fn[operation]} w. dim={dim}- Val Loss vs. Train Examples")
+    training_val_loss(training_examples, val_losses, save_path=os.path.join(graphs_dir, "LogLog - training_val_loss.png"), title=f"{op_to_fn[operation]} w. dim={dim}- Val Loss vs. Train Examples", graph_type="log-log")
+    
+    # Training loop complete
+    logger.info("-" * 50)
+    logger.info("Training loop complete")
+    logger.info("-" * 50)
     
     # Save the model
     torch.save(model.state_dict(), os.path.join(save_dir, 'matrix_exp_model.pth'))
@@ -182,27 +202,38 @@ if __name__ == "__main__":
     with open(os.path.join(save_dir, 'losses.csv'), 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Epoch', 'Train Loss', 'Validation Loss'])
-        for i, (train_loss, val_loss) in enumerate(zip(train_losses, val_losses)):
-            writer.writerow([i*100, train_loss, val_loss])
+        
+        # Loop through validation losses
+        for i, val_loss in enumerate(val_losses):
+            epoch = (i + 1) * validation_interval # Calculate the current epoch (i starts at 0)
+            train_loss = train_losses[epoch - 1]  # Get the training loss at the corresponding epoch (index is epoch-1)
+            writer.writerow([epoch, train_loss, val_loss])
+            
+    # Training loop complete
+    logger.info("-" * 50)
+    logger.info("Starting to Test")
+    logger.info("-" * 50)
 
     # Test the model
     model.eval()
+    logger.info(f"Testing on {len(test_loader)} batches")
     test_loss = 0
     with torch.no_grad():
-        for x, y in test_loader:
+        for test_idx, (x, y) in enumerate(test_loader):
             A_tensor = x.view(x.size(0), -1).to(device)
             A_exp_tensor = y.view(y.size(0), -1).to(device)
             test_output = model(A_tensor)
             test_loss += criterion(test_output, A_exp_tensor).item()
+            logger.info(f"Test: Batch {test_idx+1}/{len(test_loader)}, Current Test Batch Loss: {criterion(test_output, A_exp_tensor).item():.4f}, Cumulative Test Loss: {test_loss:.4f}")
 
         # Compare a few results
         for i in range(3):
             logger.info(f"\nExample {i+1}:")
-            logger.info("Input a:")
+            logger.info("Input A:")
             logger.info(A_tensor[i])
-            logger.info("Actual a^2:")
+            logger.info(f"Actual {op_to_fn[operation]}:")
             logger.info(A_exp_tensor[i])
-            logger.info("Predicted a^2):")
+            logger.info(f"Predicted {op_to_fn[operation]}):")
             logger.info(test_output[i].view(dim, dim).cpu().numpy())
 
     test_loss /= len(test_loader)
