@@ -30,17 +30,8 @@ for operation in "${operations[@]}"; do
     for matrix_type in "${matrix_types[@]}"; do
         for dim in "${dimensions[@]}"; do
             echo "Running train.py with operation=$operation, matrix_type=$matrix_type, dim=$dim"
-            python train.py --operation "$operation" --matrix_type "$matrix_type" --dim "$dim" --num_epochs "$num_epochs" --validation_interval "$validation_interval"
-            # python train.py --operation "$operation" --matrix_type "$matrix_type" --dim "$dim"
+            # python train.py --operation "$operation" --matrix_type "$matrix_type" --dim "$dim" --num_epochs "$num_epochs" --validation_interval "$validation_interval"
+            python train.py --operation "$operation" --matrix_type "$matrix_type" --dim "$dim"
         done
     done
 done
-# for distribution in "${distributions[@]}"; do
-#     for matrix_type in "${matrix_types[@]}"; do
-#         for dim in "${dimensions[@]}"; do
-#             echo "Running train.py with distribution=$distribution, matrix_type=$matrix_type, dim=$dim"
-#             python train.py --distribution "$distribution" --matrix_type "$matrix_type" --dim "$dim" --num_epochs "$num_epochs" --validation_interval "$validation_interval"
-#             # python train.py --distribution "$distribution" --matrix_type "$matrix_type" --dim "$dim" 
-#         done
-#     done
-# done
