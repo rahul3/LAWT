@@ -108,7 +108,7 @@ class ExperimentData(Dataset):
         elif f_type == "scalar" and operation == "sign":
             self.target = torch.sign(self.data)
         elif f_type == "matrix" and operation == "sign":
-            self.target = signm(self.data)
+            self.target = torch.tensor(np.array([signm(m.numpy()) for m in self.data]))
         else:
             raise TypeError("Unsupported function type")
 

@@ -22,6 +22,8 @@ from common import get_logger, log_loss
 torch.manual_seed(42)
 np.random.seed(42)
 
+DEBUG_MODE = True
+
 
 
 
@@ -84,7 +86,7 @@ if __name__ == "__main__":
     save_dir = os.path.join(os.getcwd(), "experiments", f"{operation}", f"{matrix_type}", f"dim_{dim}", ID)
     
     logger_dir = os.path.join(save_dir, "logs")
-    os.makedirs(logger_dir, exist_ok=True)
+    os.makedirs(logger_dir, exist_ok=True) if not DEBUG_MODE else None
     logger_path = os.path.join(logger_dir, f"matrix_{ID}.log")
     
     logger = get_logger(__name__, level=logging.DEBUG, log_file=logger_path)
@@ -96,11 +98,11 @@ if __name__ == "__main__":
     # Logging and save path setup
     logger.info(f"{ID=}")
     # Create a directory for saving results
-    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(save_dir, exist_ok=True) if not DEBUG_MODE else None
 
     # Create a directory for saving graphs
     graphs_dir = os.path.join(save_dir, "graphs")
-    os.makedirs(graphs_dir, exist_ok=True)
+    os.makedirs(graphs_dir, exist_ok=True) if not DEBUG_MODE else None
     logger.info(f"Graphs are going to be saved at: {graphs_dir}")
     
     # Check if CUDA is available and set the device
