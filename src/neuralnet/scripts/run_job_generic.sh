@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --account=def-sbrugiap
+#SBATCH --gres=gpu:1
 # #SBATCH --gres=gpu:v100:1
-#SBATCH --gres=gpu:a5000:2
+# #SBATCH --gres=gpu:a5000:2
 #SBATCH --cpus-per-task=3
 #SBATCH --mem=16G
 #SBATCH --time=1-00:00
@@ -43,7 +44,7 @@ elif [ "$(hostname)" = "node2" ]; then
     echo "Using local node2"
     printf '%*s\n' 25 '' | tr ' ' '*'
     export LAWT_DUMP_PATH="/home/rahulpadmanabhan/Development/ws1/masters_thesis_2/experiments"
-elif [ $CLUSTER = "graham" ]; then
+elif [ $CLUSTER = "beluga" ] || [ $CLUSTER = "graham" ]; then
     printf '%*s\n' 25 '' | tr ' ' '*'
     echo "Using the ${CLUSTER} cluster"
     printf '%*s\n' 25 '' | tr ' ' '*'
@@ -63,11 +64,6 @@ elif [ $CLUSTER = "graham" ]; then
     echo "Starting to install requirements...."
     pip install --no-index -r $PYTHON_REQUIREMENTS
 
-
-elif [ $CLUSTER = "beluga" ]; then
-    printf '%*s\n' 25 '' | tr ' ' '*'
-    echo "Using the ${CLUSTER} cluster"
-    printf '%*s\n' 25 '' | tr ' ' '*'
 else
     export LAWT_PATH="/home/rahul3/projects/def-sbrugiap/rahul3/LAWT"
     export LAWT_TRAIN="${LAWT_PATH}/train.py"
