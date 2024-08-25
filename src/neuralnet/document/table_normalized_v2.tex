@@ -4,20 +4,35 @@
 
 \begin{document}
 
-\section{Band Matrix}
-\begin{tabular}{@{}lrrr@{}}
-\toprule
-\multirow{2}{*}{Dimension} & \multicolumn{3}{c}{Operation} \\
-\cmidrule(l){2-4}
-& Square & Exponential & Sign \\
-\midrule
-1 & & & \\
-2 & 0.09465 & 0.337225 & 1.6088 \\
-3 & 0.09073 & 0.3591 & 2.66617 \\
-4 & 0.08219 & 0.37709 & 2.12006 \\
-5 & 0.08571 & 0.29875 & 2.41069 \\
-\bottomrule
-\end{tabular}
+\section{Parameters}
+\textbf{Parameters}:
+{
+\begin{enumerate}
+    \item \texttt{batch\_size}: $256$
+    \item \texttt{num\_epochs}: $1000$
+    \item \texttt{total\_samples}: $100000$
+    \item \texttt{validation\_interval}: $100$
+    \item \texttt{lr}: $0.001$
+    \item \texttt{loss}: \textit{frobenius}
+\end{enumerate}
+}
+\pagebreak
+
+
+% \section{Band Matrix}
+% \begin{tabular}{@{}lrrr@{}}
+% \toprule
+% \multirow{2}{*}{Dimension} & \multicolumn{3}{c}{Operation} \\
+% \cmidrule(l){2-4}
+% & Square & Exponential & Sign \\
+% \midrule
+% 1 & & & \\
+% 2 & 0.09465 & 0.337225 & 1.6088 \\
+% 3 & 0.09073 & 0.3591 & 2.66617 \\
+% 4 & 0.08219 & 0.37709 & 2.12006 \\
+% 5 & 0.08571 & 0.29875 & 2.41069 \\
+% \bottomrule
+% \end{tabular}
 
 \section{Circulant Matrix}
 \begin{tabular}{@{}lrrr@{}}
