@@ -21,6 +21,10 @@ ID = datetime.datetime.strftime(datetime.datetime.now(),'%Y%M%d%s')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
+def uniform_rand(size, low, high):
+    """Generate a random tensor with uniform distribution with coefficients between low and high"""
+    return torch.rand(size) * (high - low) + low
+
 class ExperimentData(Dataset):
     "Dataset for generating various types of matrices"
 
@@ -118,18 +122,44 @@ class ExperimentData(Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.target[idx]
     
+
+class SingleDimData(Dataset):
+    "Dataset for generating various types of matrices"
+
+    def __init__(self, n_examples, distribution="gaussian", coeff_lower=-1, coeff_upper=1, **kwargs):
+        super().__init__()
+        self.n_examples = n_examples
+        self.distribution = distribution
+
+        if self.distribution == "gaussian":
+            self.data = torch.randn(n_examples, 1)
+            if coeff_upper is not None:
+                self.data = coeff_upper / math.sqrt(3.0) * self.data
+        elif self.distribution == "uniform":
+            self.data = uniform_rand((n_examples, 1), coeff_lower, coeff_upper)
+            
+        self.target = torch.exp(self.data)
+            
+    def __len__(self):
+        return self.data.shape[0]
+
+    def __getitem__(self, idx):
+        return self.data[idx], self.target[idx]
+    
+    
     
 if __name__ == "__main__":
     
     # params
-    distribution = "gaussian" # or uniform
-    matrix_type = "band"
+    # breakpoint()
+    distribution = "uniform"
+    matrix_type = "circulent"
     coeff_lower = -1
-    coeff_upper = 2
-    batch_size = 256
+    coeff_upper = 1
+    batch_size = 128
     num_epochs = 1000
 
-    total_samples = 100000
+    total_samples = 1000
     validation_interval = 100
 
     dim = 5
@@ -147,6 +177,11 @@ if __name__ == "__main__":
                                 f_type='matrix',
                                 operation="square",
                                 **optional_args)
+    
+    full_dataset = SingleDimData(n_examples=total_samples,
+                                distribution=distribution,
+                                coeff_lower=coeff_lower,
+                                coeff_upper=coeff_upper)
 
     # Define the sizes of your train, validation, and test sets
     train_size = int(0.7 * len(full_dataset))  # 70% for training
