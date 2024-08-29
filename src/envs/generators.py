@@ -727,8 +727,8 @@ class MatrixExponential(Generator):
     def generate(self, rng, gaussian, output_limit=-1.0, type=None):
         matrix = self.gen_matrix(rng, gaussian)
         # Matrix with diagonal from Normal(1, 4)
-        diagonal = self.gen_matrix(rng, gaussian)
-        diagonal = 2 * diagonal + 1
+        diagonal = self.gen_matrix(rng, gaussian=False)
+        # diagonal = 2 * diagonal + 1
         diagonal = np.diag(np.diag(diagonal))
         
         matrix = np.triu(matrix) + np.triu(matrix, 1).T
@@ -790,6 +790,10 @@ class MatrixSign(Generator):
             
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
             matrix = self.gen_matrix(rng, gaussian)
+            diagonal = self.gen_matrix(rng, gaussian)
+            diagonal = 2 * diagonal + 1
+            diagonal = np.diag(np.diag(diagonal))
+
             result = scipy.linalg.signm(matrix)
             if output_limit >= 0.0:
                 max_coeff_y = np.max(np.abs(result))
@@ -815,6 +819,9 @@ class MatrixSine(Generator):
             
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
             matrix = self.gen_matrix(rng, gaussian)
+            diagonal = self.gen_matrix(rng, gaussian)
+            diagonal = 2 * diagonal + 1
+            diagonal = np.diag(np.diag(diagonal))
             result = scipy.linalg.sinm(matrix)
             if output_limit >= 0.0:
                 max_coeff_y = np.max(np.abs(result))
@@ -840,6 +847,9 @@ class MatrixCosine(Generator):
             
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
             matrix = self.gen_matrix(rng, gaussian)
+            diagonal = self.gen_matrix(rng, gaussian)
+            diagonal = 2 * diagonal + 1
+            diagonal = np.diag(np.diag(diagonal))
             result = scipy.linalg.cosm(matrix)
             if output_limit >= 0.0:
                 max_coeff_y = np.max(np.abs(result))
