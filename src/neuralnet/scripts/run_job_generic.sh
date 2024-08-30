@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --account=def-sbrugiap
-#SBATCH --gres=gpu:1
-# #SBATCH --gres=gpu:v100:1
+# #SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:v100:1
 # #SBATCH --gres=gpu:a5000:2
 #SBATCH --cpus-per-task=3
 #SBATCH --mem=16G
-#SBATCH --time=1-00:00
+#SBATCH --time=5-00:00
 #SBATCH --mail-user=rahul.padmanabhan@mail.concordia.ca
 #SBATCH --mail-type=ALL
 #SBATCH --output=/home/rahul3/temp/slurm_output/%x_%j.out
@@ -78,9 +78,9 @@ echo "LAWT_DUMP_PATH: $LAWT_DUMP_PATH"
 echo "PYTHON_REQUIREMENTS: $PYTHON_REQUIREMENTS"
 
 # Experiment details
-EXP_NAME="matrix_logarithm"
-EXP_ID="202408252325"
-OPERATION="matrix_logarithm"
+EXP_NAME="matrix_sign"
+EXP_ID="202408282345"
+OPERATION="matrix_sign"
 MAX_EPOCHS=100
 
 echo "Experiment name: $EXP_NAME"
@@ -92,6 +92,8 @@ echo "Displaying the result of 'which python' command:"
 which python
 
 if [ "${CLUSTER:-}" = "beluga" ] || [ "${CLUSTER:-}" = "graham" ]; then
+# if [ $CLUSTER = "beluga" ] || [ $CLUSTER = "graham" ]; then
+    echo "Running with srun"
     echo "Python version:"
     python --version
     PYTHON_EXEC=$(which python)
