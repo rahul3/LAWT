@@ -91,13 +91,14 @@ class Rademacher(dist.Distribution):
 class ExperimentData(Dataset):
     "Dataset for generating various types of matrices"
 
-    def __init__(self, n_examples, dim, distribution="gaussian", matrix_type='', coeff_upper=1, f_type="matrix", operation="square", 
-                 wigner_diag_mean=1, wigner_diag_std=2**0.5, **kwargs):
+    def __init__(self, n_examples, dim, distribution="gaussian", matrix_type='', 
+                 coeff_upper=1, f_type="matrix", operation="square", **kwargs):
         super().__init__()
         self.n_examples = n_examples
         self.dim = dim
         self.distribution = distribution
         self.matrix_type = matrix_type
+        self.scalable = False
 
         if self.distribution == "gaussian":
             self.data = torch.randn(n_examples, dim, dim)
@@ -175,6 +176,8 @@ class ExperimentData(Dataset):
             self.target = torch.tensor(np.array([signm(m.numpy()) for m in self.data]))
         else:
             raise TypeError("Unsupported function type")
+        
+        
 
     def __len__(self):
         return self.data.shape[0]
@@ -207,22 +210,25 @@ class SingleDimData(Dataset):
         return self.data[idx], self.target[idx]
     
     
-class DimData(Dataset):
+class NNData(Dataset):
     "Dataset for generating various types of matrices"
 
-    def __init__(self, n_examples, distribution="gaussian", coeff_lower=-1, coeff_upper=1, **kwargs):
+    def __init__(self, n_examples, distribution="gaussian", dim=1, coeff_lower=-1, coeff_upper=1, **kwargs):
         super().__init__()
         self.n_examples = n_examples
         self.distribution = distribution
 
         if self.distribution == "gaussian":
-            self.data = torch.randn(n_examples, 1)
+            self.data = torch.randn(n_examples, dim, dim)
             if coeff_upper is not None:
                 self.data = coeff_upper / math.sqrt(3.0) * self.data
         elif self.distribution == "uniform":
-            self.data = uniform_rand((n_examples, 1), coeff_lower, coeff_upper)
-            
-        self.target = torch.exp(self.data)
+            self.data = uniform_rand((n_examples, dim, dim), coeff_lower, coeff_upper)
+        
+        if dim == 1:
+            self.target = torch.exp(self.data)
+        else:
+            self.target = torch.tensor(np.array([expm(m.numpy()) for m in self.data]))
             
     def __len__(self):
         return self.data.shape[0]
