@@ -24,8 +24,8 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 
-save_dir = "/home/rahulpadmanabhan/Development/ws1/masters_thesis_2/experiments/scalar/exp"
-logger = get_logger(__name__, log_file=os.path.join(save_dir, "exp.log"))
+save_dir = "/home/rahulpadmanabhan/Development/ws1/masters_thesis_2/experiments/scalar/exp_2"
+logger = get_logger(__name__, log_file=os.path.join(save_dir, "exp_2.log"))
 
 # Check if CUDA is available and set the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -117,7 +117,7 @@ if __name__ == "__main__":
                 
                 test_output = model(x)
                 test_loss += criterion(test_output, y).item()
-                logger.info(f"Test: Batch {test_idx+1}/{len(test_loader)}, Current Test Batch Loss: {criterion(test_output, y).item():.4f}, Cumulative Test Loss: {test_loss:.4f}")
+                # logger.info(f"Test: Batch {test_idx+1}/{len(test_loader)}, Current Test Batch Loss: {criterion(test_output, y).item():.4f}, Cumulative Test Loss: {test_loss:.4f}")
 
             # Compare a few results
             for i in range(3):
@@ -125,7 +125,7 @@ if __name__ == "__main__":
                 logger.info("Input A:")
                 logger.info(x[i])
                 logger.info(y[i])
-                # logger.info(test_output[i].view(-1).cpu().numpy())
+                logger.info(test_output[i].view(-1).cpu().numpy())
 
         test_loss /= len(test_loader)
         logger.info(f'Test Loss: {test_loss:.4f}')

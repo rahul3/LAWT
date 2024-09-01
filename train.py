@@ -252,6 +252,7 @@ if __name__ == '__main__':
     parser = get_parser()
     params = parser.parse_args()
     if params.eval_only and params.eval_from_exp != "":
+        breakpoint()
         # read params from pickle
         pickle_file = params.eval_from_exp + "/params.pkl"
         exp_str = params.eval_from_exp

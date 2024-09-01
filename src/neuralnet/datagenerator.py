@@ -1,6 +1,7 @@
 import datetime
 import torch
 import torch.nn as nn
+import torch.distributions as dist
 import torch.optim as optim
 from torch.nn import functional as F
 
@@ -25,6 +26,68 @@ def uniform_rand(size, low, high):
     """Generate a random tensor with uniform distribution with coefficients between low and high"""
     return torch.rand(size) * (high - low) + low
 
+def generate_wigner_matrices(num_matrices, matrix_size):
+    """Generate random Wigner matrices
+
+    Args:
+        num_matrices (int): Number of matrices to generate
+        matrix_size (int): Size of the square matrices
+
+    Returns:
+        matrices (torch.Tensor): Tensor of shape (num_matrices, matrix_size, matrix_size)
+    """
+    matrices = torch.zeros(num_matrices, matrix_size, matrix_size)
+    
+    for i in range(num_matrices):
+        # Randomly choose two distributions for each matrix
+        dist1, dist2 = random_distribution_pair()
+        
+        # Generate upper triangular and diagonal elements
+        upper = dist1.sample((matrix_size, matrix_size))
+        diag = dist2.sample((matrix_size,))
+        
+        # Make the matrix symmetric
+        matrix = upper.triu(1) + upper.triu(1).t() + torch.diag(diag)
+        
+        matrices[i] = matrix
+    
+    return matrices
+
+def random_distribution_pair():
+    """Randomly choose two distributions from a list of distributions
+
+    Returns:
+        dist1 (torch.distributions.Distribution): First distribution
+        dist2 (torch.distributions.Distribution): Second distribution
+    """
+    distributions = [
+        lambda: dist.Normal(0, torch.rand(1).item() + 0.5),
+        lambda: dist.Uniform(-torch.sqrt(torch.tensor(3.0)), torch.sqrt(torch.tensor(3.0))),
+        lambda: Rademacher(),  # Corrected Rademacher distribution
+        lambda: ShiftedExponential(rate=1.0)
+    ]
+    
+    dist1 = torch.randint(0, len(distributions), (1,)).item()
+    dist2 = torch.randint(0, len(distributions), (1,)).item()
+    # logger.debug(f"Chose distributions {dist1} and {dist2}")
+    
+    return distributions[dist1](), distributions[dist2]()
+
+class ShiftedExponential(dist.Exponential):
+    def __init__(self, rate):
+        super().__init__(rate)
+    
+    def sample(self, sample_shape=torch.Size()):
+        samples = super().sample(sample_shape)
+        return samples - 1/self.rate  # Shift to make mean 0
+
+class Rademacher(dist.Distribution):
+    def __init__(self):
+        super().__init__(validate_args=False)
+
+    def sample(self, sample_shape=torch.Size()):
+        return torch.randint(0, 2, sample_shape).float() * 2 - 1
+
 class ExperimentData(Dataset):
     "Dataset for generating various types of matrices"
 
@@ -48,10 +111,7 @@ class ExperimentData(Dataset):
             raise TypeError("Unsupported distribution")
 
         if matrix_type == "wigner":
-            A_triu = torch.triu(self.data, 1)
-            self.data = A_triu + A_triu.transpose(-2, -1)
-            diagonal = torch.diag_embed(torch.randn(n_examples, dim) * wigner_diag_std + wigner_diag_mean)
-            self.data = self.data + diagonal
+            self.data = generate_wigner_matrices(n_examples, dim)
         elif matrix_type == "orthogonal":
             q, _ = torch.linalg.qr(self.data)
             self.data = q
@@ -124,6 +184,30 @@ class ExperimentData(Dataset):
     
 
 class SingleDimData(Dataset):
+    "Dataset for generating various types of matrices"
+
+    def __init__(self, n_examples, distribution="gaussian", coeff_lower=-1, coeff_upper=1, **kwargs):
+        super().__init__()
+        self.n_examples = n_examples
+        self.distribution = distribution
+
+        if self.distribution == "gaussian":
+            self.data = torch.randn(n_examples, 1)
+            if coeff_upper is not None:
+                self.data = coeff_upper / math.sqrt(3.0) * self.data
+        elif self.distribution == "uniform":
+            self.data = uniform_rand((n_examples, 1), coeff_lower, coeff_upper)
+            
+        self.target = torch.exp(self.data)
+            
+    def __len__(self):
+        return self.data.shape[0]
+
+    def __getitem__(self, idx):
+        return self.data[idx], self.target[idx]
+    
+    
+class DimData(Dataset):
     "Dataset for generating various types of matrices"
 
     def __init__(self, n_examples, distribution="gaussian", coeff_lower=-1, coeff_upper=1, **kwargs):

@@ -22,7 +22,7 @@ from common import get_logger, log_loss
 torch.manual_seed(42)
 np.random.seed(42)
 
-DEBUG_MODE = True
+DEBUG_MODE = False 
 
 
 
