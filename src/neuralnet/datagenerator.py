@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
 import math
 
-from scipy.linalg import expm, hadamard, signm
+from scipy.linalg import expm, hadamard, signm, cosm, sinm, logm
 import numpy as np
 
 from common import get_logger
@@ -139,18 +139,20 @@ class ExperimentData(Dataset):
                 self.data[:, i] = torch.roll(first_row, shifts=i, dims=1)
         elif matrix_type == "band":
             bandwidth = kwargs.get("bandwidth") or min(3, dim-1)  # Adjust bandwidth as needed
-            self.data = torch.triu(torch.tril(self.data, diagonal=bandwidth), diagonal=-bandwidth)
+            self.data = torch.triu(torch.tril(self.data, diagonal=bandwidth-1), diagonal=-bandwidth+1)
         elif matrix_type == "positive_definite":
             a = torch.randn(n_examples, dim, dim)
             self.data = a @ a.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
         elif matrix_type == "m_matrix":
             self.data = torch.abs(self.data)
-            self.data = self.data.max(dim=-1, keepdim=True)[0] * torch.eye(dim).unsqueeze(0) - self.data
+            diag = self.data.sum(dim=-1) + 1
+            self.data = torch.diag(diag) - self.data
         elif matrix_type == "p_matrix":
             self.data = torch.abs(self.data) + torch.eye(dim).unsqueeze(0) * dim
         elif matrix_type == "z_matrix":
             self.data = -torch.abs(self.data)
-            self.data = self.data + torch.diag_embed(torch.abs(self.data).sum(dim=-1))
+            diag = torch.abs(self.data).sum(dim=-1)
+            self.data = self.data + torch.diag_embed(diag)
         elif matrix_type == "h_matrix":
             a = torch.randn(n_examples, dim, dim)
             h = 0.5 * (a + a.transpose(-2, -1))
@@ -235,6 +237,63 @@ class NNData(Dataset):
 
     def __getitem__(self, idx):
         return self.data[idx], self.target[idx]
+    
+
+class NN2Data(Dataset):
+    "Dataset for generating various types of matrices"
+
+    def __init__(self, n_examples, operation="exponential", distribution="gaussian", dim=1, coeff_lower=-1, coeff_upper=1, **kwargs):
+        super().__init__()
+        self.n_examples = n_examples
+        self.distribution = distribution
+
+        if self.distribution == "gaussian":
+            self.data = torch.randn(n_examples, dim, dim)
+            if coeff_upper is not None:
+                self.data = coeff_upper / math.sqrt(3.0) * self.data
+        elif self.distribution == "uniform":
+            self.data = uniform_rand((n_examples, dim, dim), coeff_lower, coeff_upper)
+            
+            
+        if operation=="exponential":
+            if dim == 1:
+                self.target = torch.exp(self.data)
+            else:
+                self.target = torch.tensor(np.array([expm(m.numpy()) for m in self.data]))
+        elif operation=="square":
+            if dim == 1:
+                self.target = self.data ** 2
+            else:
+                self.target = torch.tensor(np.array([m.numpy() @ m.numpy() for m in self.data]))
+        elif operation=="sign":
+            if dim == 1:
+                self.target = torch.sign(self.data)
+            else:
+                self.target = torch.tensor(np.array([signm(m.numpy()) for m in self.data]))
+        elif operation=="cos":
+            if dim == 1:
+                self.target = torch.cos(self.data)
+            else:
+                self.target = torch.tensor(np.array([cosm(m.numpy()) for m in self.data]))
+        elif operation=="sin":
+            if dim == 1:
+                self.target = torch.sin(self.data)
+            else:
+                self.target = torch.tensor(np.array([sinm(m.numpy()) for m in self.data]))
+        elif operation=="log":
+            if dim == 1:
+                self.target = torch.log(self.data)
+            else:
+                self.target = torch.tensor(np.array([logm(m.numpy()) for m in self.data]))
+        else:
+            self.target = torch.tensor(np.array([expm(m.numpy()) for m in self.data]))
+            
+    def __len__(self):
+        return self.data.shape[0]
+
+    def __getitem__(self, idx):
+        return self.data[idx], self.target[idx]
+    
     
     
     

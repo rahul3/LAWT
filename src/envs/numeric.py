@@ -421,7 +421,15 @@ class NumericEnvironment(object):
         parser.add_argument(
             "--noisy_input", type=bool_flag, default=False, help="add gaussian noise to input"
         )
-
+        
+        parser.add_argument(
+            "--matrix_type", type=str, default="symmetric", help="matrix type"
+        )
+        
+        parser.add_argument(
+            "--bandwidth", type=int, default=-1, help="bandwidth of the band matrix"
+        )
+        
         parser.add_argument(
             "--sigma",
             type=float,

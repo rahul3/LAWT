@@ -11,6 +11,8 @@ import math
 from logging import getLogger
 
 import scipy.linalg
+import torch
+import torch.distributions as dist
 
 logger = getLogger()
 
@@ -41,6 +43,9 @@ class Generator(ABC):
         self.force_dim = params.force_dim
         self.first_dimension = params.first_dimension
         self.second_dimension = params.second_dimension
+        
+        self.matrix_type = params.matrix_type
+        self.bandwidth = params.bandwidth
 
     def rand_matrix(self, rng, dim1, dim2, gaussian, max_coeff):
         """
@@ -683,6 +688,70 @@ class CoTraining(Generator):
     def evaluate(self, src, tgt, hyp, prec=0.01, code=None):
         return self.subgen[code].evaluate(src, tgt, hyp, prec)
     
+    
+    
+def generate_wigner_matrices(num_matrices, matrix_size):
+    """Generate random Wigner matrices
+
+    Args:
+        num_matrices (int): Number of matrices to generate
+        matrix_size (int): Size of the square matrices
+
+    Returns:
+        matrices (torch.Tensor): Tensor of shape (num_matrices, matrix_size, matrix_size)
+    """
+    matrices = torch.zeros(num_matrices, matrix_size, matrix_size)
+    
+    for i in range(num_matrices):
+        # Randomly choose two distributions for each matrix
+        dist1, dist2 = random_distribution_pair()
+        
+        # Generate upper triangular and diagonal elements
+        upper = dist1.sample((matrix_size, matrix_size))
+        diag = dist2.sample((matrix_size,))
+        
+        # Make the matrix symmetric
+        matrix = upper.triu(1) + upper.triu(1).t() + torch.diag(diag)
+        
+        matrices[i] = matrix
+    
+    return matrices
+
+def random_distribution_pair():
+    """Randomly choose two distributions from a list of distributions
+
+    Returns:
+        dist1 (torch.distributions.Distribution): First distribution
+        dist2 (torch.distributions.Distribution): Second distribution
+    """
+    distributions = [
+        lambda: dist.Normal(0, torch.rand(1).item() + 0.5),
+        lambda: dist.Uniform(-torch.sqrt(torch.tensor(3.0)), torch.sqrt(torch.tensor(3.0))),
+        lambda: Rademacher(),  # Corrected Rademacher distribution
+        lambda: ShiftedExponential(rate=1.0)
+    ]
+    
+    dist1 = torch.randint(0, len(distributions), (1,)).item()
+    dist2 = torch.randint(0, len(distributions), (1,)).item()
+    # logger.debug(f"Chose distributions {dist1} and {dist2}")
+    
+    return distributions[dist1](), distributions[dist2]()
+
+class ShiftedExponential(dist.Exponential):
+    def __init__(self, rate):
+        super().__init__(rate)
+    
+    def sample(self, sample_shape=torch.Size()):
+        samples = super().sample(sample_shape)
+        return samples - 1/self.rate  # Shift to make mean 0
+
+class Rademacher(dist.Distribution):
+    def __init__(self):
+        super().__init__(validate_args=False)
+
+    def sample(self, sample_shape=torch.Size()):
+        return torch.randint(0, 2, sample_shape).float() * 2 - 1
+    
 
 class MatrixCube(Generator):
     def __init__(self, params):
@@ -725,15 +794,88 @@ class MatrixExponential(Generator):
         super().__init__(params)
         
     def generate(self, rng, gaussian, output_limit=-1.0, type=None):
-        matrix = self.gen_matrix(rng, gaussian)
-        # Matrix with diagonal from Normal(1, 4)
-        diagonal = self.gen_matrix(rng, gaussian=False)
-        # diagonal = 2 * diagonal + 1
-        diagonal = np.diag(np.diag(diagonal))
+        dim = rng.randint(self.min_dimension, self.max_dimension + 1)
+        max_coeff = rng.randint(self.min_input_coeff, self.max_input_coeff + 1)
         
-        matrix = np.triu(matrix) + np.triu(matrix, 1).T
-        matrix = matrix - np.diag(np.diag(matrix)) + diagonal
-        result = scipy.linalg.expm(matrix)
+        if self.matrix_type == "symmetric":
+            a = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+            matrix = np.tril(a) + np.tril(a, -1).T
+        elif self.matrix_type == "wigner":
+            matrix = generate_wigner_matrices(1, dim)
+            matrix = torch.squeeze(generate_wigner_matrices(1,dim), 0).numpy()
+        elif self.matrix_type == "orthogonal":
+            matrix = torch.linalg.qr(torch.tensor(self.rand_matrix(rng, dim, dim, gaussian, max_coeff)))[0].numpy()
+        elif self.matrix_type == "toeplitz":
+            first_row = torch.randn(1, dim)
+            data = torch.zeros(1, dim, dim)
+            for i in range(dim):
+                data[:, i, i:] = first_row[:, :dim-i]
+                data[:, i:, i] = first_row[:, :dim-i]
+            matrix = torch.squeeze(data, 0).numpy()
+        elif self.matrix_type == "hankel":
+            first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+            last_col = self.rand_matrix(rng, dim-1, 1, gaussian, max_coeff)
+            matrix = np.hstack((first_row, last_col))
+            matrix = np.flip(matrix, axis=1)
+        elif self.matrix_type == "stochastic":
+            matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+            matrix = torch.tensor(matrix)
+            matrix = matrix / matrix.sum(dim=1, keepdim=True)
+            matrix = matrix.numpy()
+        elif self.matrix_type == "circulant":
+            first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+            first_row = torch.tensor(first_row)
+            data = torch.zeros(1, dim, dim)
+            for i in range(dim):
+                data[:, i] = torch.roll(first_row, shifts=i, dims=1)
+            matrix = torch.squeeze(data, 0).numpy()
+        elif self.matrix_type == "band":
+            if self.bandwidth == -1:
+                self.bandwidth = min(3, dim-1)
+            matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+            # The above code is performing the following operations in Python using PyTorch:
+            matrix = torch.tensor(matrix)
+            matrix = torch.triu(torch.tril(matrix, diagonal=self.bandwidth-1), diagonal=-self.bandwidth+1)
+            matrix = torch.squeeze(matrix, 0).numpy()
+        elif self.matrix_type == "positive_definite":
+            matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+            matrix = torch.tensor(matrix)
+            matrix = matrix @ matrix.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
+            matrix = torch.squeeze(matrix, 0).numpy()
+        elif self.matrix_type == "m_matrix":
+            matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+            matrix = torch.tensor(matrix)
+            matrix = torch.abs(matrix)  # Ensure all elements are non-negative
+            diag = matrix.sum(dim=-1) + 1  # Sum of each row plus a small positive value
+            matrix = torch.diag(diag) - matrix  # Subtract off-diagonal elements from diagonal
+            matrix = torch.squeeze(matrix, 0).numpy()
+        elif self.matrix_type == "p_matrix":
+            matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+            matrix = torch.tensor(matrix)
+            matrix = torch.abs(matrix) + torch.eye(dim).unsqueeze(0) * dim
+            matrix = torch.squeeze(matrix, 0).numpy()
+        elif self.matrix_type == "z_matrix":
+            matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+            matrix = torch.tensor(matrix)
+            matrix = -torch.abs(matrix)  # Make all off-diagonal elements non-positive
+            diag = torch.abs(matrix).sum(dim=-1)  # Sum of absolute values of each row
+            matrix = matrix + torch.diag(diag)  # Add positive diagonal to make it a Z-matrix
+            matrix = torch.squeeze(matrix, 0).numpy()
+        elif self.matrix_type == "h_matrix":
+            matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+            matrix = torch.tensor(matrix)
+            h = 0.5 * (matrix + matrix.transpose(-2, -1))
+            m = torch.abs(h).sum(dim=-1, keepdim=True) - torch.abs(torch.diag_embed(torch.diagonal(h, dim1=-2, dim2=-1)))
+            matrix = h + m * torch.eye(dim).unsqueeze(0)
+            matrix = torch.squeeze(matrix, 0).numpy()
+        elif self.matrix_type == "hadamard":
+            h = torch.tensor(scipy.linalg.hadamard(dim), dtype=torch.float32)
+            matrix = h.numpy()
+        else:
+            matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+        
+        result = scipy.linalg.expm(matrix)  
+        
         if output_limit >= 0.0:
             max_coeff_y = np.max(np.abs(result))
             if max_coeff_y >= output_limit:
@@ -755,16 +897,86 @@ class MatrixLogarithm(Generator):
             super().__init__(params)
             
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
-            matrix = self.gen_matrix(rng, gaussian)
-            # Wigner matrix generation TODO: Add a parameter for the distributions
-            # Matrix with diagonal from Normal(1, 4)
-            diagonal = self.gen_matrix(rng, gaussian)
-            diagonal = 2 * diagonal + 1
-            diagonal = np.diag(np.diag(diagonal))
-
-            matrix = np.triu(matrix) + np.triu(matrix, 1).T
-            matrix = matrix - np.diag(np.diag(matrix)) + diagonal
+            dim = rng.randint(self.min_dimension, self.max_dimension + 1)
+            max_coeff = rng.randint(self.min_input_coeff, self.max_input_coeff + 1)
             
+            if self.matrix_type == "symmetric":
+                a = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = np.tril(a) + np.tril(a, -1).T
+            elif self.matrix_type == "wigner":
+                matrix = generate_wigner_matrices(1, dim)
+                matrix = torch.squeeze(generate_wigner_matrices(1,dim), 0).numpy()
+            elif self.matrix_type == "orthogonal":
+                matrix = torch.linalg.qr(torch.tensor(self.rand_matrix(rng, dim, dim, gaussian, max_coeff)))[0].numpy()
+            elif self.matrix_type == "toeplitz":
+                first_row = torch.randn(1, dim)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i, i:] = first_row[:, :dim-i]
+                    data[:, i:, i] = first_row[:, :dim-i]
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "hankel":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                last_col = self.rand_matrix(rng, dim-1, 1, gaussian, max_coeff)
+                matrix = np.hstack((first_row, last_col))
+                matrix = np.flip(matrix, axis=1)
+            elif self.matrix_type == "stochastic":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix / matrix.sum(dim=1, keepdim=True)
+                matrix = matrix.numpy()
+            elif self.matrix_type == "circulant":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                first_row = torch.tensor(first_row)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i] = torch.roll(first_row, shifts=i, dims=1)
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "band":
+                if self.bandwidth == -1:
+                    self.bandwidth = min(3, dim-1)
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                # The above code is performing the following operations in Python using PyTorch:
+                matrix = torch.tensor(matrix)
+                matrix = torch.triu(torch.tril(matrix, diagonal=self.bandwidth-1), diagonal=-self.bandwidth+1)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "positive_definite":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix @ matrix.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "m_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix)  # Ensure all elements are non-negative
+                diag = matrix.sum(dim=-1) + 1  # Sum of each row plus a small positive value
+                matrix = torch.diag(diag) - matrix  # Subtract off-diagonal elements from diagonal
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "p_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "z_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = -torch.abs(matrix)  # Make all off-diagonal elements non-positive
+                diag = torch.abs(matrix).sum(dim=-1)  # Sum of absolute values of each row
+                matrix = matrix + torch.diag(diag)  # Add positive diagonal to make it a Z-matrix
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "h_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                h = 0.5 * (matrix + matrix.transpose(-2, -1))
+                m = torch.abs(h).sum(dim=-1, keepdim=True) - torch.abs(torch.diag_embed(torch.diagonal(h, dim1=-2, dim2=-1)))
+                matrix = h + m * torch.eye(dim).unsqueeze(0)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "hadamard":
+                h = torch.tensor(scipy.linalg.hadamard(dim), dtype=torch.float32)
+                matrix = h.numpy()
+            else:
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+
             result = scipy.linalg.logm(matrix)
             if output_limit >= 0.0:
                 max_coeff_y = np.max(np.abs(result))
@@ -787,12 +999,88 @@ class MatrixSign(Generator):
         
         def __init__(self, params):
             super().__init__(params)
-            
+                          
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
-            matrix = self.gen_matrix(rng, gaussian)
-            diagonal = self.gen_matrix(rng, gaussian)
-            diagonal = 2 * diagonal + 1
-            diagonal = np.diag(np.diag(diagonal))
+            dim = rng.randint(self.min_dimension, self.max_dimension + 1)
+            max_coeff = rng.randint(self.min_input_coeff, self.max_input_coeff + 1)
+            
+            if self.matrix_type == "symmetric":
+                a = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = np.tril(a) + np.tril(a, -1).T
+            elif self.matrix_type == "wigner":
+                matrix = generate_wigner_matrices(1, dim)
+                matrix = torch.squeeze(generate_wigner_matrices(1,dim), 0).numpy()
+            elif self.matrix_type == "orthogonal":
+                matrix = torch.linalg.qr(torch.tensor(self.rand_matrix(rng, dim, dim, gaussian, max_coeff)))[0].numpy()
+            elif self.matrix_type == "toeplitz":
+                first_row = torch.randn(1, dim)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i, i:] = first_row[:, :dim-i]
+                    data[:, i:, i] = first_row[:, :dim-i]
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "hankel":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                last_col = self.rand_matrix(rng, dim-1, 1, gaussian, max_coeff)
+                matrix = np.hstack((first_row, last_col))
+                matrix = np.flip(matrix, axis=1)
+            elif self.matrix_type == "stochastic":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix / matrix.sum(dim=1, keepdim=True)
+                matrix = matrix.numpy()
+            elif self.matrix_type == "circulant":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                first_row = torch.tensor(first_row)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i] = torch.roll(first_row, shifts=i, dims=1)
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "band":
+                if self.bandwidth == -1:
+                    self.bandwidth = min(3, dim-1)
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                # The above code is performing the following operations in Python using PyTorch:
+                matrix = torch.tensor(matrix)
+                matrix = torch.triu(torch.tril(matrix, diagonal=self.bandwidth-1), diagonal=-self.bandwidth+1)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "positive_definite":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix @ matrix.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "m_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix)  # Ensure all elements are non-negative
+                diag = matrix.sum(dim=-1) + 1  # Sum of each row plus a small positive value
+                matrix = torch.diag(diag) - matrix  # Subtract off-diagonal elements from diagonal
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "p_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "z_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = -torch.abs(matrix)  # Make all off-diagonal elements non-positive
+                diag = torch.abs(matrix).sum(dim=-1)  # Sum of absolute values of each row
+                matrix = matrix + torch.diag(diag)  # Add positive diagonal to make it a Z-matrix
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "h_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                h = 0.5 * (matrix + matrix.transpose(-2, -1))
+                m = torch.abs(h).sum(dim=-1, keepdim=True) - torch.abs(torch.diag_embed(torch.diagonal(h, dim1=-2, dim2=-1)))
+                matrix = h + m * torch.eye(dim).unsqueeze(0)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "hadamard":
+                h = torch.tensor(scipy.linalg.hadamard(dim), dtype=torch.float32)
+                matrix = h.numpy()
+            else:
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+
 
             result = scipy.linalg.signm(matrix)
             if output_limit >= 0.0:
@@ -816,12 +1104,88 @@ class MatrixSine(Generator):
         
         def __init__(self, params):
             super().__init__(params)
-            
+      
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
-            matrix = self.gen_matrix(rng, gaussian)
-            diagonal = self.gen_matrix(rng, gaussian)
-            diagonal = 2 * diagonal + 1
-            diagonal = np.diag(np.diag(diagonal))
+            dim = rng.randint(self.min_dimension, self.max_dimension + 1)
+            max_coeff = rng.randint(self.min_input_coeff, self.max_input_coeff + 1)
+            
+            if self.matrix_type == "symmetric":
+                a = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = np.tril(a) + np.tril(a, -1).T
+            elif self.matrix_type == "wigner":
+                matrix = generate_wigner_matrices(1, dim)
+                matrix = torch.squeeze(generate_wigner_matrices(1,dim), 0).numpy()
+            elif self.matrix_type == "orthogonal":
+                matrix = torch.linalg.qr(torch.tensor(self.rand_matrix(rng, dim, dim, gaussian, max_coeff)))[0].numpy()
+            elif self.matrix_type == "toeplitz":
+                first_row = torch.randn(1, dim)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i, i:] = first_row[:, :dim-i]
+                    data[:, i:, i] = first_row[:, :dim-i]
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "hankel":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                last_col = self.rand_matrix(rng, dim-1, 1, gaussian, max_coeff)
+                matrix = np.hstack((first_row, last_col))
+                matrix = np.flip(matrix, axis=1)
+            elif self.matrix_type == "stochastic":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix / matrix.sum(dim=1, keepdim=True)
+                matrix = matrix.numpy()
+            elif self.matrix_type == "circulant":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                first_row = torch.tensor(first_row)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i] = torch.roll(first_row, shifts=i, dims=1)
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "band":
+                if self.bandwidth == -1:
+                    self.bandwidth = min(3, dim-1)
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                # The above code is performing the following operations in Python using PyTorch:
+                matrix = torch.tensor(matrix)
+                matrix = torch.triu(torch.tril(matrix, diagonal=self.bandwidth-1), diagonal=-self.bandwidth+1)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "positive_definite":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix @ matrix.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "m_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix)  # Ensure all elements are non-negative
+                diag = matrix.sum(dim=-1) + 1  # Sum of each row plus a small positive value
+                matrix = torch.diag(diag) - matrix  # Subtract off-diagonal elements from diagonal
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "p_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "z_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = -torch.abs(matrix)  # Make all off-diagonal elements non-positive
+                diag = torch.abs(matrix).sum(dim=-1)  # Sum of absolute values of each row
+                matrix = matrix + torch.diag(diag)  # Add positive diagonal to make it a Z-matrix
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "h_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                h = 0.5 * (matrix + matrix.transpose(-2, -1))
+                m = torch.abs(h).sum(dim=-1, keepdim=True) - torch.abs(torch.diag_embed(torch.diagonal(h, dim1=-2, dim2=-1)))
+                matrix = h + m * torch.eye(dim).unsqueeze(0)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "hadamard":
+                h = torch.tensor(scipy.linalg.hadamard(dim), dtype=torch.float32)
+                matrix = h.numpy()
+            else:
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+
             result = scipy.linalg.sinm(matrix)
             if output_limit >= 0.0:
                 max_coeff_y = np.max(np.abs(result))
@@ -845,11 +1209,89 @@ class MatrixCosine(Generator):
         def __init__(self, params):
             super().__init__(params)
             
+
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
-            matrix = self.gen_matrix(rng, gaussian)
-            diagonal = self.gen_matrix(rng, gaussian)
-            diagonal = 2 * diagonal + 1
-            diagonal = np.diag(np.diag(diagonal))
+            dim = rng.randint(self.min_dimension, self.max_dimension + 1)
+            max_coeff = rng.randint(self.min_input_coeff, self.max_input_coeff + 1)
+            
+            if self.matrix_type == "symmetric":
+                a = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = np.tril(a) + np.tril(a, -1).T
+            elif self.matrix_type == "wigner":
+                matrix = generate_wigner_matrices(1, dim)
+                matrix = torch.squeeze(generate_wigner_matrices(1,dim), 0).numpy()
+            elif self.matrix_type == "orthogonal":
+                matrix = torch.linalg.qr(torch.tensor(self.rand_matrix(rng, dim, dim, gaussian, max_coeff)))[0].numpy()
+            elif self.matrix_type == "toeplitz":
+                first_row = torch.randn(1, dim)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i, i:] = first_row[:, :dim-i]
+                    data[:, i:, i] = first_row[:, :dim-i]
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "hankel":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                last_col = self.rand_matrix(rng, dim-1, 1, gaussian, max_coeff)
+                matrix = np.hstack((first_row, last_col))
+                matrix = np.flip(matrix, axis=1)
+            elif self.matrix_type == "stochastic":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix / matrix.sum(dim=1, keepdim=True)
+                matrix = matrix.numpy()
+            elif self.matrix_type == "circulant":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                first_row = torch.tensor(first_row)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i] = torch.roll(first_row, shifts=i, dims=1)
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "band":
+                if self.bandwidth == -1:
+                    self.bandwidth = min(3, dim-1)
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                # The above code is performing the following operations in Python using PyTorch:
+                matrix = torch.tensor(matrix)
+                matrix = torch.triu(torch.tril(matrix, diagonal=self.bandwidth-1), diagonal=-self.bandwidth+1)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "positive_definite":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix @ matrix.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "m_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix)  # Ensure all elements are non-negative
+                diag = matrix.sum(dim=-1) + 1  # Sum of each row plus a small positive value
+                matrix = torch.diag(diag) - matrix  # Subtract off-diagonal elements from diagonal
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "p_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "z_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = -torch.abs(matrix)  # Make all off-diagonal elements non-positive
+                diag = torch.abs(matrix).sum(dim=-1)  # Sum of absolute values of each row
+                matrix = matrix + torch.diag(diag)  # Add positive diagonal to make it a Z-matrix
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "h_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                h = 0.5 * (matrix + matrix.transpose(-2, -1))
+                m = torch.abs(h).sum(dim=-1, keepdim=True) - torch.abs(torch.diag_embed(torch.diagonal(h, dim1=-2, dim2=-1)))
+                matrix = h + m * torch.eye(dim).unsqueeze(0)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "hadamard":
+                h = torch.tensor(scipy.linalg.hadamard(dim), dtype=torch.float32)
+                matrix = h.numpy()
+            else:
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+
+
             result = scipy.linalg.cosm(matrix)
             if output_limit >= 0.0:
                 max_coeff_y = np.max(np.abs(result))
@@ -874,8 +1316,89 @@ class MatrixPthRoot(Generator):
             super().__init__(params)
             self.p = params.p
             
+
         def generate(self, rng, gaussian, output_limit=-1.0, type=None):
-            matrix = self.gen_matrix(rng, gaussian)
+            dim = rng.randint(self.min_dimension, self.max_dimension + 1)
+            max_coeff = rng.randint(self.min_input_coeff, self.max_input_coeff + 1)
+            
+            if self.matrix_type == "symmetric":
+                a = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = np.tril(a) + np.tril(a, -1).T
+            elif self.matrix_type == "wigner":
+                matrix = generate_wigner_matrices(1, dim)
+                matrix = torch.squeeze(generate_wigner_matrices(1,dim), 0).numpy()
+            elif self.matrix_type == "orthogonal":
+                matrix = torch.linalg.qr(torch.tensor(self.rand_matrix(rng, dim, dim, gaussian, max_coeff)))[0].numpy()
+            elif self.matrix_type == "toeplitz":
+                first_row = torch.randn(1, dim)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i, i:] = first_row[:, :dim-i]
+                    data[:, i:, i] = first_row[:, :dim-i]
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "hankel":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                last_col = self.rand_matrix(rng, dim-1, 1, gaussian, max_coeff)
+                matrix = np.hstack((first_row, last_col))
+                matrix = np.flip(matrix, axis=1)
+            elif self.matrix_type == "stochastic":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix / matrix.sum(dim=1, keepdim=True)
+                matrix = matrix.numpy()
+            elif self.matrix_type == "circulant":
+                first_row = self.rand_matrix(rng, 1, dim, gaussian, max_coeff)
+                first_row = torch.tensor(first_row)
+                data = torch.zeros(1, dim, dim)
+                for i in range(dim):
+                    data[:, i] = torch.roll(first_row, shifts=i, dims=1)
+                matrix = torch.squeeze(data, 0).numpy()
+            elif self.matrix_type == "band":
+                if self.bandwidth == -1:
+                    self.bandwidth = min(3, dim-1)
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                # The above code is performing the following operations in Python using PyTorch:
+                matrix = torch.tensor(matrix)
+                matrix = torch.triu(torch.tril(matrix, diagonal=self.bandwidth-1), diagonal=-self.bandwidth+1)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "positive_definite":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = matrix @ matrix.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "m_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix)  # Ensure all elements are non-negative
+                diag = matrix.sum(dim=-1) + 1  # Sum of each row plus a small positive value
+                matrix = torch.diag(diag) - matrix  # Subtract off-diagonal elements from diagonal
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "p_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = torch.abs(matrix) + torch.eye(dim).unsqueeze(0) * dim
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "z_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                matrix = -torch.abs(matrix)  # Make all off-diagonal elements non-positive
+                diag = torch.abs(matrix).sum(dim=-1)  # Sum of absolute values of each row
+                matrix = matrix + torch.diag(diag)  # Add positive diagonal to make it a Z-matrix
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "h_matrix":
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+                matrix = torch.tensor(matrix)
+                h = 0.5 * (matrix + matrix.transpose(-2, -1))
+                m = torch.abs(h).sum(dim=-1, keepdim=True) - torch.abs(torch.diag_embed(torch.diagonal(h, dim1=-2, dim2=-1)))
+                matrix = h + m * torch.eye(dim).unsqueeze(0)
+                matrix = torch.squeeze(matrix, 0).numpy()
+            elif self.matrix_type == "hadamard":
+                h = torch.tensor(scipy.linalg.hadamard(dim), dtype=torch.float32)
+                matrix = h.numpy()
+            else:
+                matrix = self.rand_matrix(rng, dim, dim, gaussian, max_coeff)
+
+
             result = scipy.linalg.fractional_matrix_power(matrix, 1/self.p)
             if output_limit >= 0.0:
                 max_coeff_y = np.max(np.abs(result))
