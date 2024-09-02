@@ -66,7 +66,7 @@ elif [ "$(hostname)" = "node2" ]; then
     export LAWT_DUMP_PATH="/home/rahulpadmanabhan/Development/ws1/masters_thesis_2/experiments"
     export PYTHON_EXEC="/home/rahulpadmanabhan/Development/envs/venv310/bin/python"
 
-elif [ "${CLUSTER:-}" = "beluga" ] || [ "${CLUSTER:-}" = "graham" ]; then
+elif [ "${CC_CLUSTER:-}" = "beluga" ] || [ "${CLUSTER:-}" = "graham" ]; then
     printf '%*s\n' 25 '' | tr ' ' '*'
     echo "Using the ${CLUSTER} cluster"
     printf '%*s\n' 25 '' | tr ' ' '*'
