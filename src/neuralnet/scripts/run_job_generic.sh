@@ -1,11 +1,22 @@
 #!/bin/bash
-# #SBATCH --job-name=matrix_exp
-#SBATCH --account=def-sbrugiap
+#!/encs/bin/bash
+# #Speed cluster settings
+# #SBATCH gpus=1
+# #SBATCH -p pg
+# #BATCH --chdir=/nfs/home/r/r_padman/experiments
+# #SBATCH --nodes=1
+# #SBATCH --ntasks=1
+# #SBATCH --output=/nfs/home/r/r_padman/slurm_output/%x_%j.out
+# #SBATCH --error=/nfs/home/r/r_padman/slurm_output/%x_%j.err
+# #SBATCH --account=mathstat
+# #CC Settings
+# #SBATCH --account=def-sbrugiap
 # #SBATCH --gres=gpu:1
-#SBATCH --gres=gpu:v100:1
+# #SBATCH --gres=gpu:v100:1
 # #SBATCH --gres=gpu:a5000:2
-#SBATCH --cpus-per-task=3
+# #Common settings
 #SBATCH --mem=16G
+# #SBATCH --cpus-per-task=3
 #SBATCH --time=5-00:00
 #SBATCH --mail-user=rahul.padmanabhan@mail.concordia.ca
 #SBATCH --mail-type=ALL
@@ -80,6 +91,15 @@ elif [ "$(hostname)" = "speed-submit.encs.concordia.ca" ]; then
     export LAWT_PATH="/nfs/home/r/r_padman/repos/LAWT"
     export LAWT_TRAIN="${LAWT_PATH}/train.py"
     export LAWT_DUMP_PATH="/nfs/home/r/r_padman/experiments"
+
+    module load python/3.10.13
+    nvidia-smi
+    source /home/r/r_padman/scratch/tmp/venv/bin/activate.csh
+    # conda activate /speed-scratch/r_padman/myconda
+
+    export PYTHON_EXEC=$(which python)
+    echo "Python path: $PYTHON_EXEC"
+
 else
     export LAWT_PATH="/home/rahul3/projects/def-sbrugiap/rahul3/LAWT"
     export LAWT_TRAIN="${LAWT_PATH}/train.py"
