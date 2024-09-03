@@ -239,7 +239,7 @@ class NNData(Dataset):
         return self.data[idx], self.target[idx]
     
 
-class NN2Data(Dataset):
+class NNMatrixData(Dataset):
     "Dataset for generating various types of matrices"
 
     def __init__(self, n_examples, operation="exponential", distribution="gaussian", dim=1, coeff_lower=-1, coeff_upper=1, **kwargs):

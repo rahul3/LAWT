@@ -10,8 +10,11 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
 import numpy as np
+import sys
 
-from datagenerator import NNData
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from datagenerator import NNData, NNMatrixData
 from models import MatrixNet
 from loss import FrobeniusNormLoss, LogFrobeniusNormLoss, MAPE
 
@@ -19,16 +22,21 @@ from graphs import training_val_loss
 
 from common import get_logger, log_loss
 
+torch.set_default_dtype(torch.float64)
+
 # Setup seeds for reproducibility
 torch.manual_seed(42)
 np.random.seed(42)
 
 # Generate ID based on current datetime
 ID = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/exponential/{ID}"
+# ###########################################################################################
+operation = "log"
+# ###########################################################################################
+save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/{operation}/{ID}"
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
-logger = get_logger(__name__, log_file=os.path.join(save_dir, f"{ID}.log"))
+logger = get_logger(__name__, log_file=os.path.join(save_dir, f"{operation}_{ID}.log"))
 
 # Check if CUDA is available and set the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,10 +46,12 @@ logger.info(f"Experiment ID: {ID}")
 
 
 if __name__ == "__main__":
+    logger.info(f"Experiment ID: {ID}")
+    logger.info(f"Operation: {operation}")
     
-    for dim in range(4, 11):
+    for dim in range(1, 11):
         distribution = "uniform"
-        coeff_lower = -1
+        coeff_lower = 0 # for log, we need to ensure that the input is positive
         coeff_upper = 1
         batch_size = 128
         num_epochs = 100
@@ -55,10 +65,11 @@ if __name__ == "__main__":
         for train_sample in train_samples:
             train_sample = int(train_sample) - test_samples
             logger.info(f"Training with {train_sample} samples")
-            full_dataset = NNData(n_examples=train_sample + test_samples,
+            full_dataset = NNMatrixData(n_examples=train_sample + test_samples,
                                         distribution=distribution,
                                         dim=dim,
-                                        coeff_lower=coeff_lower,
+                                        operation=operation,
+                                        coeff_lower=coeff_lower,    
                                         coeff_upper=coeff_upper)
             
             train_dataset, test_dataset = random_split(full_dataset, [train_sample, test_samples])
@@ -92,11 +103,11 @@ if __name__ == "__main__":
                 for batch_idx, (x, y) in enumerate(train_loader):
                     # Convert to PyTorch tensors and move to GPU
                     if dim == 1:
-                        x = x.view(-1, 1).to(device)
-                        y = y.view(-1, 1).to(device)
+                        x = x.view(-1, 1).to(device).to(torch.float64)
+                        y = y.view(-1, 1).to(device).to(torch.float64)
                     else:
-                        x = x.view(x.size(0), -1, dim*dim).to(device)  # Reshape to (batch, time, channels)
-                        y = y.view(y.size(0), -1, dim*dim).to(device)  # Reshape to (batch, time, channels)
+                        x = x.view(x.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
+                        y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
                     
                     # Forward pass
                     output = model(x)
@@ -118,7 +129,7 @@ if __name__ == "__main__":
             model_save_dir = os.path.join(save_dir, f"dim_{dim}")
             if not os.path.exists(model_save_dir):
                 os.makedirs(model_save_dir)
-            torch.save(model.state_dict(), os.path.join(model_save_dir, f'exp_model_{str(train_sample)}.pth'))
+            torch.save(model.state_dict(), os.path.join(model_save_dir, f'{operation}_model_{str(train_sample)}.pth'))
 
             # Training loop complete
             logger.info("-" * 50)
@@ -132,11 +143,11 @@ if __name__ == "__main__":
             with torch.no_grad():
                 for test_idx, (x, y) in enumerate(test_loader):
                     if dim == 1:
-                        x = x.view(-1, 1).to(device)
-                        y = y.view(-1, 1).to(device)
+                        x = x.view(-1, 1).to(device).to(torch.float64)
+                        y = y.view(-1, 1).to(device).to(torch.float64)
                     else:
-                        x = x.view(x.size(0), -1, dim*dim).to(device)  # Reshape to (batch, time, channels)
-                        y = y.view(y.size(0), -1, dim*dim).to(device)  # Reshape to (batch, time, channels)
+                        x = x.view(x.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
+                        y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
                     
                     test_output = model(x)
                     test_loss += criterion(test_output, y).item()
@@ -151,6 +162,13 @@ if __name__ == "__main__":
 
             test_loss /= len(test_loader)
             logger.info(f'Test Loss: {test_loss:.4f}')
+    
+    logger.info("-" * 50)
+    logger.info("Experiment complete")
+    logger.info(f"Experiment ID: {ID}")
+    logger.info(f"Operation: {operation}")
+    logger.info(f"Save directory: {save_dir}")
+    logger.info("-" * 50)
             
         
         
