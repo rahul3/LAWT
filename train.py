@@ -252,9 +252,11 @@ if __name__ == '__main__':
     parser = get_parser()
     params = parser.parse_args()
     if params.eval_only and params.eval_from_exp != "":
-        breakpoint()
+        # breakpoint()
         # read params from pickle
         pickle_file = params.eval_from_exp + "/params.pkl"
+        evalulation_size = params.eval_size
+        evaluation_verbose = params.eval_verbose
         exp_str = params.eval_from_exp
         assert os.path.isfile(pickle_file)
         pk = pickle.load(open(pickle_file, 'rb'))
@@ -268,6 +270,8 @@ if __name__ == '__main__':
                 params.__dict__[p] = pickled_args[p]
 
         params.eval_only = True
+        params.eval_size = evalulation_size
+        params.eval_verbose = evaluation_verbose
         params.reload_model = exp_str + '/best-' + params.validation_metrics + '.pth'
         # print(params.reload_model)
         assert os.path.isfile(params.reload_model)
