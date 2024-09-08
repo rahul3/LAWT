@@ -180,6 +180,15 @@ class ExperimentData(Dataset):
             raise TypeError("Unsupported function type")
         
         
+        if kwargs.get("only_real") is True:
+            if self.target.is_complex():
+                if len(self.target.shape) == 2: 
+                    self.target = torch.real(self.target)
+                elif len(self.target.shape) == 3:
+                    self.target = torch.stack([torch.real(t) for t in self.target])
+                else:
+                    raise ValueError("Unsupported target shape")
+
 
     def __len__(self):
         return self.data.shape[0]
