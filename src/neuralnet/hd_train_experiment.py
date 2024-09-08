@@ -15,7 +15,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from datagenerator import NNData, NNMatrixData
-from models import MatrixNet
+from models import MatrixNet, DeepMatrixNet
 from loss import FrobeniusNormLoss, LogFrobeniusNormLoss, MAPE
 
 from graphs import training_val_loss
@@ -31,9 +31,9 @@ np.random.seed(42)
 # Generate ID based on current datetime
 ID = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 # ###########################################################################################
-operation = "log"
+operation = "sin"
 # ###########################################################################################
-save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/{operation}/{ID}"
+save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/{operation}/deepmatrixnet_{ID}"
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 logger = get_logger(__name__, log_file=os.path.join(save_dir, f"{operation}_{ID}.log"))
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     
     for dim in range(1, 11):
         distribution = "uniform"
-        coeff_lower = 0 # for log, we need to ensure that the input is positive
+        coeff_lower = -1 # for log, we need to ensure that the input is positive
         coeff_upper = 1
         batch_size = 128
         num_epochs = 100
@@ -92,9 +92,12 @@ if __name__ == "__main__":
             logger.info("=" * 50)
             
             
-            model = MatrixNet(dim*dim).to(device)
-            criterion = FrobeniusNormLoss() if dim > 1 else nn.MSELoss()
+            # model = MatrixNet(dim*dim).to(device)
+            model = DeepMatrixNet(dim*dim).to(device)
+            criterion = FrobeniusNormLoss().to(torch.float64) if dim > 1 else nn.MSELoss().to(torch.float64)
             optimizer = optim.Adam(model.parameters(), lr=lr)
+            
+            logger.info(f"Model architecture:\n{model}")
             
             train_losses = []
             for epoch in range(num_epochs):
@@ -105,15 +108,31 @@ if __name__ == "__main__":
                     if dim == 1:
                         x = x.view(-1, 1).to(device).to(torch.float64)
                         y = y.view(-1, 1).to(device).to(torch.float64)
+                        if torch.is_complex(y):
+                            y_real = torch.real(y).to(torch.float64)
+                            y_imag = torch.imag(y).to(torch.float64)
+                            y_imag_magnitude = torch.abs(y_imag).to(torch.float64)
+                        else:
+                            y_real = y.to(torch.float64)
+                            y_imag = torch.zeros_like(y_real).to(torch.float64)
                     else:
                         x = x.view(x.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
                         y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
-                    
-                    # Forward pass
-                    output = model(x)
+                        if torch.is_complex(y):
+                            y_real = torch.stack([torch.real(mtx) for mtx in y]).to(torch.float64)
+                            y_imag = torch.stack([torch.imag(mtx) for mtx in y]).to(torch.float64)
+                        else:
+                            y_real = y.to(torch.float64)
+                            y_imag = torch.zeros_like(y_real).to(torch.float64)
+                        
+
+                    output_real = model(y_real)
+                    output_imag = model(y_imag)
                     
                     # Compute loss
-                    loss = criterion(output, y)
+                    loss_real = criterion(output_real, y_real)
+                    loss_imag = criterion(output_imag, y_imag)
+                    loss = loss_real + loss_imag
                     
                     # Backward pass and optimize
                     optimizer.zero_grad()
@@ -140,17 +159,35 @@ if __name__ == "__main__":
             
             model.eval()
             test_loss = 0
+            test_loss_real = 0
+            test_loss_imag = 0
             with torch.no_grad():
                 for test_idx, (x, y) in enumerate(test_loader):
                     if dim == 1:
                         x = x.view(-1, 1).to(device).to(torch.float64)
                         y = y.view(-1, 1).to(device).to(torch.float64)
+                        if torch.is_complex(y):
+                            y_real = torch.real(y).to(torch.float64)
+                            y_imag = torch.imag(y).to(torch.float64)
+                        else:
+                            y_real = y.to(torch.float64)
+                            y_imag = torch.zeros_like(y_real).to(torch.float64)
                     else:
                         x = x.view(x.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
                         y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
+                        if torch.is_complex(y):
+                            y_real = torch.stack([torch.real(mtx) for mtx in y]).to(torch.float64)
+                            y_imag = torch.stack([torch.imag(mtx) for mtx in y]).to(torch.float64)
+                        else:
+                            y_real = y.to(torch.float64)
+                            y_imag = torch.zeros_like(y_real).to(torch.float64)
                     
-                    test_output = model(x)
-                    test_loss += criterion(test_output, y).item()
+                    output_real = model(y_real)
+                    output_imag = model(y_imag)
+                    output = output_real + 1j * output_imag
+                    test_loss_real += criterion(output_real.to(torch.float64), y_real.to(torch.float64)).item()
+                    test_loss_imag += criterion(output_imag.to(torch.float64), y_imag.to(torch.float64)).item()
+                    test_loss += test_loss_real + test_loss_imag
                     # logger.info(f"Test: Batch {test_idx+1}/{len(test_loader)}, Current Test Batch Loss: {criterion(test_output, y).item():.4f}, Cumulative Test Loss: {test_loss:.4f}")
 
                 # Compare a few results
@@ -158,7 +195,7 @@ if __name__ == "__main__":
                     logger.info(f"\nExample {i+1}:")
                     logger.info(f"Input A: {x[i].view(-1).cpu().numpy()}")
                     logger.info(f"Actual Output: {y[i].view(-1).cpu().numpy()}")
-                    logger.info(f"Predicted Output: {test_output[i].view(-1).cpu().numpy()}")
+                    logger.info(f"Predicted Output: {output[i].view(-1).cpu().numpy()}")
 
             test_loss /= len(test_loader)
             logger.info(f'Test Loss: {test_loss:.4f}')
@@ -171,4 +208,4 @@ if __name__ == "__main__":
     logger.info("-" * 50)
             
         
-        
+    
