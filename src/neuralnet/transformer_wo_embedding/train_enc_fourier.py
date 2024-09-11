@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from scipy.linalg import expm
+from scipy.linalg import expm, signm, cosm, sinm, logm
 import math
 import numpy as np
 from torch.utils.data import DataLoader
@@ -124,6 +124,16 @@ class MatrixApproximator(nn.Module):
         return output.view(batch_size, 5, 5)  # [batch_size, 5, 5]
     
 
+class FrobeniusNormLoss(nn.Module):
+    def __init__(self):
+        super(FrobeniusNormLoss, self).__init__()
+
+    def forward(self, output, target):
+        frob_norm = torch.norm(output - target, p='fro', dim=(1, 2))
+        return frob_norm.mean()
+
+
+
 # Usage
 x = torch.randn(10, 5, 5)
 y = torch.stack([torch.from_numpy(expm(x[i].numpy())) for i in range(x.shape[0])])
@@ -133,20 +143,23 @@ print(output.shape)  # Should be torch.Size([10, 5, 5])
 
 
 # Set up training parameters
-num_epochs = 20
+num_epochs = 1000
 batch_size = 32
 learning_rate = 0.001
 
 # Create dataset and dataloader
-dataset = NNMatrixData(n_examples=10000, distribution="uniform", dim=5, operation="exponential", coeff_lower=-1, coeff_upper=1, only_real=True)
-train_dataset, test_dataset = random_split(dataset, [8000, 2000])   
+dataset = NNMatrixData(n_examples=2**15, distribution="uniform", dim=5, operation="sin", coeff_lower=-1, coeff_upper=1, only_real=True)
+train_dataset, test_dataset = random_split(dataset, [0.8, 0.2])   
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=5)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
+
+print(f"Number of training examples: {len(train_dataset)}")
+print(f"Number of test examples: {len(test_dataset)}")
 
 
 # Initialize model, loss function, and optimizer
 model = MatrixApproximator(input_dim=25, num_fourier_features=100, d_model=200, nhead=8, num_layers=2).to(device)
-criterion = nn.MSELoss()
+criterion = FrobeniusNormLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
 # Training loop
@@ -168,31 +181,26 @@ for epoch in range(num_epochs):
 
 print("Training completed.")
 
+# Initialize variables to accumulate errors
+total_relative_error = 0
+total_samples = 0
+
 # Test the model
 model.eval()
 with torch.no_grad():
     for batch_x, batch_y in test_loader:
         batch_x, batch_y = batch_x.to(device), batch_y.to(device)
         predicted = model(batch_x)
-        test_loss = criterion(predicted, batch_y)
-        total_loss += test_loss.item()
-    avg_loss = total_loss / len(test_loader)
-    print(f'Average Test Loss: {avg_loss:.4f}') 
-    print(f'Test Loss: {test_loss.item():.4f}')
-    
-# Calculate relative error
-relative_error = torch.norm(predicted - batch_y, dim=(1, 2)) / torch.norm(batch_y, dim=(1, 2))
-avg_relative_error = relative_error.mean().item()
-print(f'Average Relative Error: {avg_relative_error:.4f}')
+        
+        # Calculate and accumulate relative error for this batch
+        relative_error = torch.norm(predicted - batch_y, p='fro', dim=(1, 2)) / torch.norm(batch_y, p='fro', dim=(1, 2))
+        total_relative_error += relative_error.sum().item()
+        total_samples += batch_x.size(0)
 
-# Calculate element-wise relative error
-element_wise_relative_error = torch.abs(predicted - batch_y) / (torch.abs(batch_y) + 1e-8)  # Add small constant to avoid division by zero
-avg_element_wise_relative_error = element_wise_relative_error.mean().item()
-print(f'Average Element-wise Relative Error: {avg_element_wise_relative_error:.4f}')
+# Calculate average relative error over entire test set
+    avg_relative_error = total_relative_error / total_samples   
+    print(f'Average Relative Error: {avg_relative_error:.4f}')
 
-# Calculate percentage of predictions within 5% relative error
-within_tolerance = (relative_error <= 0.05).float().mean().item()
-print(f'Percentage of predictions within 5% relative error: {within_tolerance*100:.2f}%')
 
 # Save the model
 # torch.save(model.state_dict(), 'matrix_approximator_model.pth')
