@@ -19,7 +19,6 @@ from models import MatrixFunctionTransformer
 from loss import FrobeniusNormLoss, LogFrobeniusNormLoss, MAPE
 
 from graphs import training_val_loss
-
 from common import get_logger, log_loss
 
 torch.set_default_dtype(torch.float64)
@@ -32,8 +31,9 @@ np.random.seed(42)
 ID = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 # ###########################################################################################
 operation = "sin"
+dim=5
 # ###########################################################################################
-save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/transformer_wo_embedding/{operation}/encoder_{ID}"
+save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/transformer_wo_embedding/{operation}/f'dim_{dim}'/encoder_{ID}"
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 logger = get_logger(__name__, log_file=os.path.join(save_dir, f"{operation}_{ID}.log"))
@@ -44,7 +44,8 @@ logger.info(f"Using device: {device}")
 logger.info(f"Experiment ID: {ID}")
 logger.info(f"Operation: {operation}")
 
-dim=5
+
+
 distribution = "uniform"
 if operation == "log":
     coeff_lower = 0 # for log, we need to ensure that the input is positive
@@ -231,6 +232,20 @@ with torch.no_grad():
     predicted = torch.cat(predicted, 0)
     actuals = torch.cat(actuals, 0)
     
+    relative_error = torch.norm(predicted - actuals, p='fro', dim=(1,2)) / torch.norm(actuals, p='fro', dim=(1,2))
+    logger.info(f"{relative_error.shape=}, {relative_error.mean()=}, {relative_error.std()=}")
+    
+    # Number of accurate samples
+    accurate_samples = (relative_error <= tolerance).sum().item()
+    total_samples = relative_error.size(0)
+    logger.info(f"Number of accurate samples: {accurate_samples}/{total_samples}")
+    
+    # Calculate the mean and standard deviation of the relative error
+    mean_relative_error = relative_error.mean().item()
+    std_relative_error = relative_error.std().item()
+    logger.info(f"Mean relative error: {mean_relative_error:.4f}")
+    logger.info(f"Standard deviation of relative error: {std_relative_error:.4f}")
+    
     logger.info(f"\n{predicted.shape=}\n{actuals.shape=}")
     
     np_predicted = predicted.view(-1).cpu().numpy()
@@ -251,10 +266,10 @@ with torch.no_grad():
     logger.info(f"{mu=},{sigma=}")
     logger.info(f"{y_main=},{u_shaded=},{l_shaded=}")
     
-    x_raw = np.repeat(train_vals[idx], np_predicted.shape[0])
-    y_raw = np_actuals
+    # x_raw = np.repeat(train_vals[idx], np_predicted.shape[0])
+    # y_raw = np_actuals
     
-    logger.info(f"{x_raw.shape=}, {y_raw.shape=}")
+    # logger.info(f"{x_raw.shape=}, {y_raw.shape=}")
 
     mu_lst.append(mu)
     sigma_lst.append(sigma)
