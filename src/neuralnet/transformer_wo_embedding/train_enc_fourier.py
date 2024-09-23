@@ -155,7 +155,7 @@ if __name__ == '__main__':
     # Experiment parameters
     num_layers_lst = [2, 4, 8, 16]
     # operation_lst = ["exponential", "square", "sign", "cos", "sin", "log"]
-    operation_lst = ["sign", "cos", "sin", "log", "exponential"]
+    operation_lst = ["sin"]
     dim_lst = [3,5,8]
     sample_size_lst = [2**k for k in range(5, 19)]
     test_size = 2**14
@@ -167,7 +167,7 @@ if __name__ == '__main__':
             for num_layers in num_layers_lst:
                 for sample_size in sample_size_lst:
                     ID = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-                    save_dir = f"/mnt/wd_2tb/encoder_fourier_models/{operation}/dim_{dim}/layers_{num_layers}"
+                    save_dir = f"/home/rahul3/scratch/encoder_fourier/{operation}/dim_{dim}/layers_{num_layers}"
                     # save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/encoder_fourier/{ID}"
                     if not os.path.exists(save_dir):
                         os.makedirs(save_dir)
@@ -325,31 +325,6 @@ if __name__ == '__main__':
                         df.to_csv(csv_path, index=False, mode='a', header=not os.path.exists(csv_path))
                         logger.info(f"Experiment results also saved to {csv_path}")
                         
-                        # Define the path for the Excel file
-                        excel_path = os.path.join(save_dir, 'experiment_results.xlsx')
-                        
-                        # If the file doesn't exist, create it. Otherwise, append to it.
-                        if not os.path.exists(excel_path):
-                            df.to_excel(excel_path, index=False, sheet_name='Results')
-                        else:
-                            with pd.ExcelWriter(excel_path, mode='a', engine='openpyxl') as writer:
-                                # Read existing sheets
-                                book = writer.book
-                                if 'Results' in book.sheetnames:
-                                    # If 'Results' sheet exists, load it
-                                    existing_df = pd.read_excel(excel_path, sheet_name='Results')
-                                    # Append new data
-                                    updated_df = pd.concat([existing_df, df], ignore_index=True)
-                                    # Write updated dataframe to 'Results' sheet
-                                    updated_df.to_excel(writer, index=False, sheet_name='Results')
-                                else:
-                                    # If 'Results' sheet doesn't exist, create it
-                                    df.to_excel(writer, index=False, sheet_name='Results')
-                        
-                        # Save to Excel
-                        logger.info(f"Experiment results saved to {excel_path}")
-                        
-                    
 
                     except Exception as e:
                         logger.error(f"An error occurred during the experiment: {str(e)}")
