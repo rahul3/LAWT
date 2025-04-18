@@ -134,3 +134,8 @@ src/neuralnet/experiments/
 src/neuralnet/matrix_nn_results/
 
 tmp/
+# VS Code workspace files
+*.code-workspace
+# PyTorch model files
+*.pth
+.pth
