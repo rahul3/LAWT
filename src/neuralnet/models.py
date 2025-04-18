@@ -1,4 +1,6 @@
 import torch.nn as nn
+import math
+import torch
 
 # Define the neural network
 class MatrixNet(nn.Module):
@@ -61,3 +63,50 @@ class MatrixFunctionTransformer(nn.Module):
         x = x.transpose(-2, -1)
         x = self.encoder2(x)
         return x
+    
+class FourierFeatures(nn.Module):
+    def __init__(self, input_dim, num_fourier_features, sigma=1.0):
+        super(FourierFeatures, self).__init__()
+        
+        # Initialize B with random values from a normal distribution
+        self.B = nn.Parameter(torch.randn(input_dim, num_fourier_features) * sigma, requires_grad=False)
+        self.num_fourier_features = num_fourier_features
+
+    def forward(self, x):
+        # x should be of shape [batch_size, input_dim]
+        # Project x onto B
+        x_proj = 2 * math.pi * x @ self.B
+        
+        # Compute sine and cosine features
+        return torch.cat([torch.sin(x_proj), torch.cos(x_proj)], dim=-1)
+    
+class FourierFeaturesEncoder(nn.Module):
+    def __init__(self, input_dim, num_fourier_features, sigma=1.0):
+        super(FourierFeaturesEncoder, self).__init__()
+        self.fourier_features = FourierFeatures(input_dim, num_fourier_features, sigma)
+
+    def forward(self, x):
+        return self.fourier_features(x)
+    
+
+class MatrixFunctionFourierTransformer(nn.Module):
+    def __init__(self, d_model, nhead, num_layers):
+        super().__init__()
+        self.encoder1 = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward=d_model*4, dropout=0.1, batch_first=True),
+            num_layers
+        )
+        self.fourier_features = FourierFeatures(d_model, d_model*2, sigma=1.0)
+        self.encoder2 = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward=d_model*4, dropout=0.1, batch_first=True),
+            num_layers
+        )
+
+    def forward(self, x):
+        x = self.fourier_features(x) # [batch_size, d_model, 2*d_model]
+        x = self.encoder1(x) # [batch_size, d_model, d_model]
+        x = x.transpose(-2, -1) # [batch_size, d_model, d_model]    
+        x = self.fourier_features(x) # [batch_size, d_model, 2*d_model]
+        x = self.encoder2(x) # [batch_size, d_model, d_model]
+        return x
+

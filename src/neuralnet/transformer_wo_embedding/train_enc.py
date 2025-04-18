@@ -33,7 +33,8 @@ ID = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 # ###########################################################################################
 operation = "sign"
 # ###########################################################################################
-save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/transformer_wo_embedding/{operation}/encoder_{ID}"
+# save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/transformer_wo_embedding/{operation}/encoder_{ID}"
+save_dir = f"/home/rahulpadmanabhan/projects/ws1/experiments/transformer_encoder/{operation}/encoder_{ID}"
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 logger = get_logger(__name__, log_file=os.path.join(save_dir, f"{operation}_{ID}.log"))
@@ -78,7 +79,8 @@ for dim in range(1, 9):
                                     dim=dim,
                                     operation=operation,
                                     coeff_lower=coeff_lower,    
-                                    coeff_upper=coeff_upper)
+                                    coeff_upper=coeff_upper,
+                                    only_real=True) # adding so only the real part of the matrix is used
         
         train_dataset, test_dataset = random_split(full_dataset, [train_sample, test_samples])
         
