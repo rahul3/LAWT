@@ -142,6 +142,8 @@ class FrobeniusNormLoss(nn.Module):
 
 
 
+
+
 # Usage
 # x = torch.randn(10, 5, 5)
 # y = torch.stack([torch.from_numpy(expm(x[i].numpy())) for i in range(x.shape[0])])
@@ -149,184 +151,185 @@ class FrobeniusNormLoss(nn.Module):
 # output = model(y)
 # print(output.shape)  # Should be torch.Size([10, 5, 5])
 
-# Experiment parameters
-num_layers_lst = [2, 4, 8, 16]
-operation_lst = ["exponential", "square", "sign", "cos", "sin", "log"]
-dim_lst = [3,5,8]
-sample_size_lst = [2**k for k in range(5, 19)]
-test_size = 2**14
+if __name__ == '__main__':
+    # Experiment parameters
+    num_layers_lst = [2, 4, 8, 16]
+    # operation_lst = ["exponential", "square", "sign", "cos", "sin", "log"]
+    # operation_lst = ["exponential", "log", "sin", "cos"]
+    operation_lst = ["log", "sin", "cos"]
+    dim_lst = [3,5,8]
+    sample_size_lst = [2**k for k in range(5, 19)]
+    test_size = 2**14
 
 
 
-for operation in operation_lst: 
-    for dim in dim_lst:
-        for num_layers in num_layers_lst:
-            for sample_size in sample_size_lst:
-                ID = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-                save_dir = f"/home/rahulpadmanabhan/projects/ws1/experiments/encoder_fourier/{operation}/dim_{dim}/layers_{num_layers}"
-                # save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/encoder_fourier/{ID}"
-                if not os.path.exists(save_dir):
-                    os.makedirs(save_dir)
-                logger = get_logger(__name__, log_file=os.path.join(save_dir, f"{operation}_{ID}.log"))
-                logger.info(f"Running experiment for operation: {operation}, dim: {dim}, num_layers: {num_layers}, sample_size: {sample_size}, test_size: {test_size}")
+    for operation in operation_lst: 
+        for dim in dim_lst:
+            for num_layers in num_layers_lst:
+                for sample_size in sample_size_lst:
+                    ID = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+                    save_dir = f"/home/rahulpadmanabhan/projects/ws1/experimentsencoder_fourier_models/{operation}/dim_{dim}/layers_{num_layers}"
+                    # save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/encoder_fourier/{ID}"
+                    if not os.path.exists(save_dir):
+                        os.makedirs(save_dir)
+                    logger = get_logger(__name__, log_file=os.path.join(save_dir, f"{operation}_{ID}.log"))
+                    logger.info(f"Running experiment for operation: {operation}, dim: {dim}, num_layers: {num_layers}, sample_size: {sample_size}, test_size: {test_size}")
 
-                # Set up training parameters
-                num_epochs = 100
-                batch_size = 64
-                learning_rate = 0.001
+                    # Set up training parameters
+                    num_epochs = 600
+                    batch_size = 64
+                    learning_rate = 0.001
 
-                try:
-                    # Create dataset and dataloader
-                    dataset = NNMatrixData(n_examples=sample_size+test_size, distribution="uniform", dim=dim, operation=operation, coeff_lower=-1, coeff_upper=1, only_real=True)
-                    train_dataset, test_dataset = random_split(dataset, [sample_size, test_size])   
-                    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=5)
-                    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
+                    try:
+                        # Create dataset and dataloader
+                        dataset = NNMatrixData(n_examples=sample_size+test_size, distribution="uniform", dim=dim, operation=operation, coeff_lower=-1, coeff_upper=1, only_real=True)
+                        train_dataset, test_dataset = random_split(dataset, [sample_size, test_size])   
+                        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=5)
+                        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
 
-                    logger.info(f"Number of training examples: {len(train_dataset)}")
-                    logger.info(f"Number of test examples: {len(test_dataset)}")
-                    
-                    # Save train and test datasets
-                    train_dir = os.path.join(save_dir, "train")
-                    test_dir = os.path.join(save_dir, "test")
-                    logger.info(f"Saving train and test datasets to {train_dir} and {test_dir}")
-                    if not os.path.exists(train_dir):
-                        os.makedirs(train_dir)
-                    if not os.path.exists(test_dir):
-                        os.makedirs(test_dir)
-                    
-                    torch.save(train_dataset, os.path.join(train_dir, f'train_dataset_{sample_size}.pt'))
-                    torch.save(test_dataset, os.path.join(test_dir, f'test_dataset_{sample_size}.pt'))
-                    
-                    logger.info(f"Saved train dataset with {len(train_dataset)} samples")
-                    logger.info(f"Saved test dataset with {len(test_dataset)} samples")
+                        logger.info(f"Number of training examples: {len(train_dataset)}")
+                        logger.info(f"Number of test examples: {len(test_dataset)}")
+                        
+                        # Save train and test datasets
+                        train_dir = os.path.join(save_dir, "train")
+                        test_dir = os.path.join(save_dir, "test")
+                        logger.info(f"Saving train and test datasets to {train_dir} and {test_dir}")
+                        if not os.path.exists(train_dir):
+                            os.makedirs(train_dir)
+                        if not os.path.exists(test_dir):
+                            os.makedirs(test_dir)
+                        
+                        torch.save(train_dataset, os.path.join(train_dir, f'train_dataset_{sample_size}.pt'))
+                        torch.save(test_dataset, os.path.join(test_dir, f'test_dataset_{sample_size}.pt'))
+                        
+                        logger.info(f"Saved train dataset with {len(train_dataset)} samples")
+                        logger.info(f"Saved test dataset with {len(test_dataset)} samples")
 
 
-                    # Initialize model, loss function, and optimizer
-                    model = MatrixApproximator(input_dim=dim**2, num_fourier_features=100, d_model=200, nhead=8, num_layers=num_layers).to(device)
-                    criterion = FrobeniusNormLoss()
-                    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+                        # Initialize model, loss function, and optimizer
+                        model = MatrixApproximator(input_dim=dim**2, num_fourier_features=3*dim**2, d_model=6*dim**2, nhead=dim**2, num_layers=num_layers).to(device)
+                        criterion = FrobeniusNormLoss()
+                        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-                    # Training loop
-                    for epoch in range(num_epochs):
-                        model.train()
-                        total_loss = 0
-                        for batch_x, batch_y in train_loader:
-                            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-                            optimizer.zero_grad()
-                            output = model(batch_x)
-                            loss = criterion(output, batch_y)
-                            loss.backward()
-                            optimizer.step()
-                            total_loss += loss.item()
-            
-                        avg_loss = total_loss / len(train_loader)
-                        if (epoch + 1) % 10 == 0:
-                            logger.info(f'Epoch [{epoch+1}/{num_epochs}], Loss: {avg_loss:.4f}')
+                        # Training loop
+                        for epoch in range(num_epochs):
+                            model.train()
+                            total_loss = 0
+                            for batch_x, batch_y in train_loader:
+                                batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+                                optimizer.zero_grad()
+                                output = model(batch_x)
+                                loss = criterion(output, batch_y)
+                                loss.backward()
+                                optimizer.step()
+                                total_loss += loss.item()
+                
+                            avg_loss = total_loss / len(train_loader)
+                            if (epoch + 1) % 10 == 0:
+                                logger.info(f'Epoch [{epoch+1}/{num_epochs}], Loss: {avg_loss:.4f}')
 
-                    logger.info("Training completed.")
+                        logger.info("Training completed.")
 
-                    # Initialize variables to accumulate errors
-                    total_relative_error = 0
-                    total_samples = 0
+                        # Initialize variables to accumulate errors
+                        total_relative_error = 0
+                        total_samples = 0
+                        
+                        relative_error_lst = []
 
-                    # Test the model
-                    model.eval()
-                    with torch.no_grad():
-                        for batch_x, batch_y in test_loader:
-                            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-                            predicted = model(batch_x)
+                        # Test the model
+                        model.eval()
+                        with torch.no_grad():
+                            for batch_x, batch_y in test_loader:
+                                batch_x, batch_y = batch_x.to(device).to(torch.float64), batch_y.to(device).to(torch.float64)
+                                predicted = model(batch_x)
+                                
+                                # Calculate and accumulate relative error for this batch
+                                relative_error = torch.norm(predicted - batch_y, p='fro', dim=(1, 2)) / (torch.norm(batch_y, p='fro', dim=(1, 2)) + 1e-10)
+                                total_relative_error += relative_error.sum().item()
+                                total_samples += batch_x.size(0)
+                                relative_error_lst.append(relative_error)
+
+                        # Calculate average relative error over entire test set
+                        avg_relative_error = total_relative_error / total_samples   
+                        logger.info(f'Average Relative Error: {avg_relative_error:.4f}')
+                        
+                        
+                        relative_error_tensor = torch.cat(relative_error_lst)
+                        mu = torch.mean(torch.log10(relative_error_tensor))
+                        sigma = (relative_error_tensor.shape[0] -1)**-1 * torch.sum((torch.log10(relative_error_tensor) - mu)**2)
+                        y_main = 10**mu 
+                
+                        u_shaded = 10**(mu - sigma)
+                        l_shaded = 10**(mu + sigma)
+                
+                
+                        # Print out some sample predictions vs actuals
+                        logger.info("\nSample Predictions vs Actuals:")
+                        model.eval()
+                        with torch.no_grad():
+                            # Get a small batch of test data
+                            sample_x, sample_y = next(iter(test_loader))
+                            sample_x, sample_y = sample_x.to(device), sample_y.to(device)
                             
-                            # Calculate and accumulate relative error for this batch
-                            relative_error = torch.norm(predicted - batch_y, p='fro', dim=(1, 2)) / torch.norm(batch_y, p='fro', dim=(1, 2))
-                            total_relative_error += relative_error.sum().item()
-                            total_samples += batch_x.size(0)
-
-                    # Calculate average relative error over entire test set
-                    avg_relative_error = total_relative_error / total_samples   
-                    logger.info(f'Average Relative Error: {avg_relative_error:.4f}')
-            
-            
-                    # Print out some sample predictions vs actuals
-                    logger.info("\nSample Predictions vs Actuals:")
-                    model.eval()
-                    with torch.no_grad():
-                        # Get a small batch of test data
-                        sample_x, sample_y = next(iter(test_loader))
-                        sample_x, sample_y = sample_x.to(device), sample_y.to(device)
+                            # Generate predictions
+                            sample_pred = model(sample_x)
+                            
+                            # Print a few examples
+                            for i in range(min(5, len(sample_x))):  # Print up to 5 examples
+                                logger.info(f"\nExample {i+1}:")
+                                logger.info("Input:")
+                                logger.info(sample_x[i].cpu().numpy())
+                                logger.info("\nPrediction:")
+                                logger.info(sample_pred[i].cpu().numpy())
+                                logger.info("\nActual:")
+                                logger.info(sample_y[i].cpu().numpy())
+                                logger.info("\nRelative Error:")
+                                rel_error = torch.norm(sample_pred[i] - sample_y[i], p='fro') / torch.norm(sample_y[i], p='fro')
+                                logger.info(f"{rel_error.item():.4f}")
+                                logger.info("-" * 50)
                         
-                        # Generate predictions
-                        sample_pred = model(sample_x)
+
+                        # Save the model
+                        if not os.path.exists(os.path.join(save_dir, 'models')):
+                            os.makedirs(os.path.join(save_dir, 'models'))
+                            
+                        model_save_path = os.path.join(save_dir, 'models', f'{operation}_dim_{dim}_layers_{num_layers}_{sample_size}_model.pth')
+                        torch.save(model.state_dict(), model_save_path)
+                        logger.info(f"Model saved to {model_save_path}")
                         
-                        # Print a few examples
-                        for i in range(min(5, len(sample_x))):  # Print up to 5 examples
-                            logger.info(f"\nExample {i+1}:")
-                            logger.info("Input:")
-                            logger.info(sample_x[i].cpu().numpy())
-                            logger.info("\nPrediction:")
-                            logger.info(sample_pred[i].cpu().numpy())
-                            logger.info("\nActual:")
-                            logger.info(sample_y[i].cpu().numpy())
-                            logger.info("\nRelative Error:")
-                            rel_error = torch.norm(sample_pred[i] - sample_y[i], p='fro') / torch.norm(sample_y[i], p='fro')
-                            logger.info(f"{rel_error.item():.4f}")
-                            logger.info("-" * 50)
-                    
+                        # Create a pandas DataFrame to store experiment results
+                        
+                        experiment_data = {
+                            'Operation': operation,
+                            'Dimension': dim,
+                            'Num_Layers': num_layers,
+                            'Learning_Rate': learning_rate,
+                            'Batch_Size': batch_size,
+                            'Num_Epochs': num_epochs,
+                            'Average_Relative_Error': avg_relative_error,
+                            'Model_Path': model_save_path,
+                            'Training_Set_Path': os.path.join(train_dir, f'train_dataset.pt'),
+                            'Test_Set_Path': os.path.join(test_dir, f'test_dataset.pt'),
+                            'Train_Samples': len(train_dataset),
+                            'Test_Samples': len(test_dataset),
+                            'Mu': mu.item(),
+                            'Sigma': sigma.item(),
+                            'Y_Main': y_main.item(),
+                            'U_Shaded': u_shaded.item(),
+                            'L_Shaded': l_shaded.item()
+                        }
+                        
+                        df = pd.DataFrame([experiment_data])
+                        
+                        # Save to CSV
+                        csv_path = os.path.join(save_dir, f'experiment_results_sample_size_{sample_size}.csv')
+                        df.to_csv(csv_path, index=False, mode='a', header=not os.path.exists(csv_path))
+                        logger.info(f"Experiment results also saved to {csv_path}")
+                        
 
-                    # Save the model
-                    torch.save(model.state_dict(), os.path.join(save_dir, f'{operation}_dim_{dim}_layers_{num_layers}_model.pth'))
-                    logger.info("Model saved.")
-                    
-                    # Create a pandas DataFrame to store experiment results
-                    
-                    experiment_data = {
-                        'Operation': operation,
-                        'Dimension': dim,
-                        'Num_Layers': num_layers,
-                        'Learning_Rate': learning_rate,
-                        'Batch_Size': batch_size,
-                        'Num_Epochs': num_epochs,
-                        'Average_Relative_Error': avg_relative_error,
-                        'Model_Path': os.path.join(save_dir, f'{operation}_dim_{dim}_layers_{num_layers}_model.pth'),
-                        'Training_Set_Path': os.path.join(train_dir, f'train_dataset.pt'),
-                        'Test_Set_Path': os.path.join(test_dir, f'test_dataset.pt'),
-                        'Train_Samples': len(train_dataset),
-                        'Test_Samples': len(test_dataset)
-                    }
-                    
-                    df = pd.DataFrame([experiment_data])
-                    
-                    # Define the path for the Excel file
-                    excel_path = os.path.join(save_dir, 'experiment_results.xlsx')
-                    
-                    # If the file doesn't exist, create it. Otherwise, append to it.
-                    if not os.path.exists(excel_path):
-                        df.to_excel(excel_path, index=False, sheet_name='Results')
-                    else:
-                        with pd.ExcelWriter(excel_path, mode='a', engine='openpyxl') as writer:
-                            # Read existing sheets
-                            book = writer.book
-                            if 'Results' in book.sheetnames:
-                                # If 'Results' sheet exists, load it
-                                existing_df = pd.read_excel(excel_path, sheet_name='Results')
-                                # Append new data
-                                updated_df = pd.concat([existing_df, df], ignore_index=True)
-                                # Write updated dataframe to 'Results' sheet
-                                updated_df.to_excel(writer, index=False, sheet_name='Results')
-                            else:
-                                # If 'Results' sheet doesn't exist, create it
-                                df.to_excel(writer, index=False, sheet_name='Results')
-                    
-                    # Save to Excel
-                    logger.info(f"Experiment results saved to {excel_path}")
-                    
-                    # Save to CSV
-                    csv_path = os.path.join(save_dir, 'experiment_results.csv')
-                    df.to_csv(csv_path, index=False, mode='a', header=not os.path.exists(csv_path))
-                    logger.info(f"Experiment results also saved to {csv_path}")
-
-                except Exception as e:
-                    logger.error(f"An error occurred during the experiment: {str(e)}")
-                    logger.error(f"Skipping this configuration and moving to the next one.")
-                    continue
+                    except Exception as e:
+                        logger.error(f"An error occurred during the experiment: {str(e)}")
+                        logger.error(f"Skipping this configuration and moving to the next one.")
+                        continue
 
 

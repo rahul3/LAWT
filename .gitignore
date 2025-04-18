@@ -132,3 +132,5 @@ neuralnet/matrix_nn_results/
 neuralnet/experiments/
 src/neuralnet/experiments/
 src/neuralnet/matrix_nn_results/
+
+tmp/
