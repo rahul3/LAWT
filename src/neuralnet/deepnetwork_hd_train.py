@@ -4,6 +4,9 @@ import csv
 import datetime
 import logging
 
+import warnings
+warnings.filterwarnings('ignore', message='logm result may be inaccurate')
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -52,7 +55,7 @@ for operation in operations_to_run:
     logger.info(f"Experiment ID: {ID}")
     logger.info(f"Operation: {operation}")
 
-    for dim in range(1, 2):
+    for dim in range(1, 8):
         distribution = "gaussian" if operation != "log" else "gaussian_positive"
         coeff_lower = -1
         coeff_upper = 1
@@ -181,8 +184,13 @@ for operation in operations_to_run:
                                                   coeff_lower=coeff_lower,
                                                   coeff_upper=coeff_upper)
                 evaluation_loader = DataLoader(evaluation_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
-                evaluations_correct = 0
-                tol = 0.05
+                evaluations_correct = dict()
+                correct_predictions = dict()
+                tols = [0.05, 0.02, 0.01, 0.005]
+                # initialize the dictionaries
+                for tol in tols:
+                    evaluations_correct[tol] = 0
+                    correct_predictions[tol] = 0
                 for evaluation_idx, (x, y) in enumerate(evaluation_loader):
                     if dim == 1:
                         x = x.view(-1, 1).to(device).to(torch.float64)
@@ -192,11 +200,13 @@ for operation in operations_to_run:
                         y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)
                     output = model(x)
                     error = torch.abs(output - y)
-                    correct_predictions = (error / (torch.abs(y) + 1e-12)) <= tol
-                    evaluations_correct += correct_predictions.sum().item()
-                    logger.info(f"Evaluation {evaluation_idx+1}/{evaluation_samples}, Correct predictions: {correct_predictions.sum().item()}/{x.size(0)}")
-                logger.info(f"Total correct predictions: {evaluations_correct}/{evaluation_samples}")
-                logger.info(f"Accuracy: {evaluations_correct/evaluation_samples:.4f}")
+                    for tol in tols:
+                        correct_predictions[tol] = (error / (torch.abs(y) + 1e-12)) <= tol
+                        evaluations_correct[tol] += correct_predictions[tol].sum().item()
+                        logger.info(f"Evaluation {evaluation_idx+1}/{evaluation_samples}, Correct predictions: {correct_predictions[tol].sum().item()}/{x.size(0)}, Tolerance: {tol}")
+                for tol in tols:
+                    logger.info(f"Total correct predictions: {evaluations_correct[tol]}/{evaluation_samples}, Tolerance: {tol}")
+                    logger.info(f"Accuracy: {evaluations_correct[tol]/evaluation_samples:.4f}, Tolerance: {tol}")
 
     logger.info("-" * 50)
     logger.info("Experiment complete")
