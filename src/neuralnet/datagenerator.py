@@ -104,6 +104,10 @@ class ExperimentData(Dataset):
             self.data = torch.randn(n_examples, dim, dim)
             if coeff_upper is not None:
                 self.data = coeff_upper / math.sqrt(3.0) * self.data
+        elif self.distribution == "gaussian_positive":
+            self.data = torch.abs(torch.randn(n_examples, dim, dim))
+            if coeff_upper is not None:
+                self.data = coeff_upper / math.sqrt(3.0) * self.data
         elif self.distribution == "uniform":
             self.data = torch.rand(n_examples, dim, dim)
             if coeff_upper is not None:
@@ -258,6 +262,10 @@ class NNMatrixData(Dataset):
 
         if self.distribution == "gaussian":
             self.data = torch.randn(n_examples, dim, dim)
+            if coeff_upper is not None:
+                self.data = coeff_upper / math.sqrt(3.0) * self.data
+        elif self.distribution == "gaussian_positive":
+            self.data = torch.abs(torch.randn(n_examples, dim, dim))
             if coeff_upper is not None:
                 self.data = coeff_upper / math.sqrt(3.0) * self.data
         elif self.distribution == "uniform":
