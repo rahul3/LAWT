@@ -37,7 +37,7 @@ for operation in operations_to_run:
     # ###########################################################################################
     # operation = "sin"
     # ###########################################################################################
-    save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/deepnetwork/{operation}/deepmatrixnet_{ID}"
+    save_dir = f"/home/rahulpadmanabhan/Development/ws1/experiments/deepnetwork/{operation}/deepmatrixnet_{ID}"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     logger = get_logger(__name__, log_file=os.path.join(save_dir, f"{operation}_{ID}.log"))
@@ -53,8 +53,8 @@ for operation in operations_to_run:
     logger.info(f"Operation: {operation}")
 
     for dim in range(1, 2):
-        distribution = "uniform"
-        coeff_lower = -1 if operation != "log" and dim > 1 else 0 # for log, we need to ensure that the input is positive
+        distribution = "gaussian" if operation != "log" else "gaussian_positive"
+        coeff_lower = -1
         coeff_upper = 1
         batch_size = 128
         num_epochs = 100
@@ -95,8 +95,8 @@ for operation in operations_to_run:
             logger.info("=" * 50)
             
             
-            # model = MatrixNet(dim*dim).to(device)
-            model = DeepMatrixNet(dim*dim).to(device)
+            model = MatrixNet(dim*dim).to(device)
+            # model = DeepMatrixNet(dim*dim).to(device)
             criterion = FrobeniusNormLoss().to(torch.float64) if dim > 1 else nn.MSELoss().to(torch.float64)
             optimizer = optim.Adam(model.parameters(), lr=lr)
             
@@ -111,31 +111,14 @@ for operation in operations_to_run:
                     if dim == 1:
                         x = x.view(-1, 1).to(device).to(torch.float64)
                         y = y.view(-1, 1).to(device).to(torch.float64)
-                        if torch.is_complex(y):
-                            y_real = torch.real(y).to(torch.float64)
-                            y_imag = torch.imag(y).to(torch.float64)
-                            y_imag_magnitude = torch.abs(y_imag).to(torch.float64)
-                        else:
-                            y_real = y.to(torch.float64)
-                            y_imag = torch.zeros_like(y_real).to(torch.float64)
                     else:
                         x = x.view(x.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
                         y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
-                        if torch.is_complex(y):
-                            y_real = torch.stack([torch.real(mtx) for mtx in y]).to(torch.float64)
-                            y_imag = torch.stack([torch.imag(mtx) for mtx in y]).to(torch.float64)
-                        else:
-                            y_real = y.to(torch.float64)
-                            y_imag = torch.zeros_like(y_real).to(torch.float64)
-                        
-
-                    output_real = model(y_real)
-                    output_imag = model(y_imag)
                     
+                        
+                    output = model(x)
                     # Compute loss
-                    loss_real = criterion(output_real, y_real)
-                    loss_imag = criterion(output_imag, y_imag)
-                    loss = loss_real + loss_imag
+                    loss = criterion(output, y)
                     
                     # Backward pass and optimize
                     optimizer.zero_grad()
@@ -146,6 +129,7 @@ for operation in operations_to_run:
                     
                 if (epoch + 1) % validation_interval == 0:
                     logger.info(f"Epoch {epoch+1}/{num_epochs}, Current Batch Loss: {loss.item():.4f}")
+
                     
                     
             model_save_dir = os.path.join(save_dir, f"dim_{dim}")
@@ -169,28 +153,12 @@ for operation in operations_to_run:
                     if dim == 1:
                         x = x.view(-1, 1).to(device).to(torch.float64)
                         y = y.view(-1, 1).to(device).to(torch.float64)
-                        if torch.is_complex(y):
-                            y_real = torch.real(y).to(torch.float64)
-                            y_imag = torch.imag(y).to(torch.float64)
-                        else:
-                            y_real = y.to(torch.float64)
-                            y_imag = torch.zeros_like(y_real).to(torch.float64)
                     else:
                         x = x.view(x.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
                         y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)  # Reshape to (batch, time, channels)
-                        if torch.is_complex(y):
-                            y_real = torch.stack([torch.real(mtx) for mtx in y]).to(torch.float64)
-                            y_imag = torch.stack([torch.imag(mtx) for mtx in y]).to(torch.float64)
-                        else:
-                            y_real = y.to(torch.float64)
-                            y_imag = torch.zeros_like(y_real).to(torch.float64)
                     
-                    output_real = model(y_real)
-                    output_imag = model(y_imag)
-                    output = output_real + 1j * output_imag
-                    test_loss_real += criterion(output_real.to(torch.float64), y_real.to(torch.float64)).item()
-                    test_loss_imag += criterion(output_imag.to(torch.float64), y_imag.to(torch.float64)).item()
-                    test_loss += test_loss_real + test_loss_imag
+                    output = model(x)
+                    test_loss += criterion(output, y).item()
                     # logger.info(f"Test: Batch {test_idx+1}/{len(test_loader)}, Current Test Batch Loss: {criterion(test_output, y).item():.4f}, Cumulative Test Loss: {test_loss:.4f}")
 
                 # Compare a few results
@@ -202,6 +170,33 @@ for operation in operations_to_run:
 
             test_loss /= len(test_loader)
             logger.info(f'Test Loss: {test_loss:.4f}')
+
+            with torch.no_grad():
+                # create 10000 evaluation samples
+                evaluation_samples = 10000
+                evaluation_dataset = NNMatrixData(n_examples=evaluation_samples,
+                                                  distribution=distribution,
+                                                  dim=dim,
+                                                  operation=operation,
+                                                  coeff_lower=coeff_lower,
+                                                  coeff_upper=coeff_upper)
+                evaluation_loader = DataLoader(evaluation_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
+                evaluations_correct = 0
+                tol = 0.05
+                for evaluation_idx, (x, y) in enumerate(evaluation_loader):
+                    if dim == 1:
+                        x = x.view(-1, 1).to(device).to(torch.float64)
+                        y = y.view(-1, 1).to(device).to(torch.float64)
+                    else:
+                        x = x.view(x.size(0), -1, dim*dim).to(device).to(torch.float64)
+                        y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)
+                    output = model(x)
+                    error = torch.abs(output - y)
+                    correct_predictions = (error / (torch.abs(y) + 1e-12)) <= tol
+                    evaluations_correct += correct_predictions.sum().item()
+                    logger.info(f"Evaluation {evaluation_idx+1}/{evaluation_samples}, Correct predictions: {correct_predictions.sum().item()}/{x.size(0)}")
+                logger.info(f"Total correct predictions: {evaluations_correct}/{evaluation_samples}")
+                logger.info(f"Accuracy: {evaluations_correct/evaluation_samples:.4f}")
 
     logger.info("-" * 50)
     logger.info("Experiment complete")
