@@ -200,16 +200,32 @@ for operation in operations_to_run:
                         x = x.view(x.size(0), -1, dim*dim).to(device).to(torch.float64)
                         y = y.view(y.size(0), -1, dim*dim).to(device).to(torch.float64)
                     output = model(x)
+                    
+                    # Compute error matrix
                     error = torch.abs(output - y)
+                    
+                    # Flatten each sample to compute d1 error per sample
+                    error_flat = error.view(x.size(0), -1)  # (batch, dim*dim)
+                    y_flat = torch.abs(y).view(x.size(0), -1)  # (batch, dim*dim)
+                    
+                    # Compute d1 error per sample: sum(|error|) / sum(|y|)
+                    # This matches LAWT's d1 metric: sum(|hyp - tgt|) / sum(|tgt|)
+                    d1_error = error_flat.sum(dim=1) / (y_flat.sum(dim=1) + 1e-12)  # (batch,)
+                    
                     for tol in tols:
-                        correct_predictions[tol] = (error / (torch.abs(y) + 1e-12)) <= tol
-                        evaluations_correct[tol] += correct_predictions[tol].sum().item()
-                        logger.info(f"Evaluation {evaluation_idx+1}/{evaluation_samples}, Correct predictions: {correct_predictions[tol].sum().item()}/{x.size(0)}, Tolerance: {tol}")
+                        # A sample is correct if its d1 error is below tolerance
+                        sample_correct = d1_error < tol  # (batch,)
+                        correct_predictions[tol] = sample_correct.sum().item()
+                        evaluations_correct[tol] += correct_predictions[tol]
+                        logger.info(f"Evaluation {evaluation_idx+1}/{len(evaluation_loader)}, Correct predictions: {correct_predictions[tol]}/{x.size(0)}, Tolerance: {tol}")
                         
                 for tol in tols:
                     logger.info(f"Total correct predictions: {evaluations_correct[tol]}/{evaluation_samples}, Tolerance: {tol}")
                     logger.info(f"Accuracy: {evaluations_correct[tol]/evaluation_samples:.4f}, Tolerance: {tol}")
                     accuracy = evaluations_correct[tol]/evaluation_samples
+                    if evaluations_correct[tol] > evaluation_samples:
+                        logger.error("Correct evaluations cannot be greater than evaluation samples.")
+                        breakpoint()
                     results_list.append({
                         "operation": operation,
                         "dim": dim,
