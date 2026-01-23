@@ -27,16 +27,23 @@ class LogFrobeniusNormLoss(nn.Module):
         frob_norm = torch.norm(pred - target, p='fro')
         return torch.log(frob_norm + self.eps)
     
-class RelativeError(nn.Module):
-    def __init__(self):
-        super(RelativeError, self).__init__()
+class RelativeErrorL1(nn.Module):
+    def __init__(self, eps=1e-7):
+        super().__init__()
+        self.eps = eps
 
     def forward(self, pred, target):
-        assert pred.shape == target.shape, "Prediction and target must have the same shape"
-        error = torch.norm(pred - target, p='fro')
-        norm_true = torch.norm(target, p='fro')
-        # Avoid division by zero
-        return error / (norm_true + 1e-7)  # Adding a small epsilon for stability
+        # Flatten each sample: (batch, features)
+        pred_flat = pred.view(pred.size(0), -1)
+        target_flat = target.view(target.size(0), -1)
+        
+        # Per-sample L1 relative error (matches d1 metric)
+        error = torch.abs(pred_flat - target_flat).sum(dim=1)
+        norm_target = torch.abs(target_flat).sum(dim=1)
+        
+        rel_error = error / (norm_target + self.eps)
+        
+        return rel_error.mean()  # Average over batch
     
 class SpectralNormError(nn.Module):
     def __init__(self):

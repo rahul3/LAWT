@@ -20,7 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from datagenerator import NNData, NNMatrixData
 from models import MatrixNet, DeepMatrixNet
-from loss import FrobeniusNormLoss, LogFrobeniusNormLoss, MAPE
+from loss import FrobeniusNormLoss, LogFrobeniusNormLoss, MAPE, RelativeErrorL1
 
 from graphs import training_val_loss
 
@@ -33,7 +33,7 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 # operations_to_run = ["sin", "sign", "cos", "log", "exp"]
-operations_to_run = ["log"]
+operations_to_run = ["exp"]
 
 for operation in operations_to_run:
     # Generate ID based on current datetime
@@ -52,7 +52,7 @@ for operation in operations_to_run:
     logger.info(f"Experiment ID: {ID}")
     logger.info(f"Operation: {operation}")
 
-    for dim in range(1, 8):
+    for dim in range(1, 9):
         distribution = "gaussian" if operation != "log" else "gaussian_positive"
         coeff_lower = -5
         coeff_upper = 5
@@ -97,7 +97,10 @@ for operation in operations_to_run:
             
             model = MatrixNet(dim*dim).to(device)
             # model = DeepMatrixNet(dim*dim).to(device)
-            criterion = FrobeniusNormLoss().to(torch.float64) if dim > 1 else nn.MSELoss().to(torch.float64)
+            if operation == "exp" or operation == "exponential":
+                criterion = RelativeErrorL1().to(torch.float64)
+            else:
+                criterion = FrobeniusNormLoss().to(torch.float64) if dim > 1 else nn.MSELoss().to(torch.float64)
             optimizer = optim.Adam(model.parameters(), lr=lr)
             
             logger.info(f"Model architecture:\n{model}")
