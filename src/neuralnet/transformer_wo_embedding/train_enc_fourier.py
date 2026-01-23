@@ -170,7 +170,8 @@ if __name__ == '__main__':
             for num_layers in num_layers_lst:
                 for sample_size in sample_size_lst:
                     ID = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-                    save_dir = f"/home/rahulpadmanabhan/projects/ws1/experimentsencoder_fourier_models/{operation}/dim_{dim}/layers_{num_layers}"
+                    save_dir = f"/home/rahul3/projects/def-sbrugiap/rahul3/icprai_2026/fourier_encoder/{ID}/{operation}/dim_{dim}/layers_{num_layers}"
+                    # save_dir = f"/home/rahulpadmanabhan/projects/ws1/experimentsencoder_fourier_models/{operation}/dim_{dim}/layers_{num_layers}"
                     # save_dir = f"/mnt/wd_2tb/thesis_transformers/experiments/encoder_fourier/{ID}"
                     if not os.path.exists(save_dir):
                         os.makedirs(save_dir)
@@ -186,12 +187,6 @@ if __name__ == '__main__':
                     batch_size = 64
                     learning_rate = 0.001
 
-                    try:
-                        # Create dataset and dataloader
-                        dataset = NNMatrixData(n_examples=sample_size+test_size, distribution="uniform", dim=dim, operation=operation, coeff_lower=-1, coeff_upper=1, only_real=True)
-                        train_dataset, test_dataset = random_split(dataset, [sample_size, test_size])   
-                        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=5)
-                        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
                     try:
                         # Create dataset and dataloader
                         dataset = NNMatrixData(n_examples=sample_size+test_size, distribution="uniform", dim=dim, operation=operation, coeff_lower=-1, coeff_upper=1, only_real=True)
