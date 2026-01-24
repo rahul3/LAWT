@@ -155,7 +155,7 @@ class FrobeniusNormLoss(nn.Module):
 if __name__ == '__main__':
     # Experiment parameters
     num_layers_lst = [2, 4, 8, 16]
-    operation_lst = ["exponential", "square", "sign", "cos", "sin", "log"]
+    operation_lst = ["sin"]
     dim_lst = [3,5,8]
     sample_size_lst = [2**k for k in range(5, 19)]
     test_size = 2**14
