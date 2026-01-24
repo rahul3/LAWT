@@ -3,20 +3,20 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=3
 #SBATCH --mem=16G
-#SBATCH --time=5-00:00
+#SBATCH --time=2-00:00
 #SBATCH --mail-user=rahul.padmanabhan@mail.concordia.ca
 #SBATCH --mail-type=ALL
-#SBATCH --output=/home/rahul3/scratch/2026/slurm_output_fourier_encoder/%x_%j.out
-#SBATCH --error=/home/rahul3/scratch/2026/slurm_output_fourier_encoder/%x_%j.err
+#SBATCH --output=/home/rahul3/scratch/2026/slurm_output_fourier_encoder_log/%x_%j.out
+#SBATCH --error=/home/rahul3/scratch/2026/slurm_output_fourier_encoder_log/%x_%j.err
 
 # Run the bashrc first
 . ~/.bashrc
-export FOURIER_ENCODER_TRAIN="/home/rahul3/projects/def-sbrugiap/rahul3/icprai_2026/LAWT/src/neuralnet/transformer_wo_embedding/train_enc_fourier.py"
-export FOURIER_ENCODER_DUMP_PATH="/home/rahul3/scratch/experiments_fourier_encoder"
-export PYTHON_REQUIREMENTS="/home/rahul3/projects/def-sbrugiap/rahul3/icprai_2026/LAWT/requirements.txt"
+export FOURIER_ENCODER_TRAIN="/home/rahul3/projects/def-sbrugiap/rahul3/icprai_2026/LAWT/src/neuralnet/transformer_wo_embedding/train_enc_fourier_log.py"
+export FOURIER_ENCODER_DUMP_PATH="/home/rahul3/scratch/experiments_fourier_encoder_log"
+# export PYTHON_REQUIREMENTS="/home/rahul3/projects/def-sbrugiap/rahul3/icprai_2026/LAWT/requirements.txt"
 
 echo "FOURIER_ENCODER_DUMP_PATH: $FOURIER_ENCODER_DUMP_PATH"
-echo "PYTHON_REQUIREMENTS: $PYTHON_REQUIREMENTS"
+# echo "PYTHON_REQUIREMENTS: $PYTHON_REQUIREMENTS"
 
 printf '%*s\n' 25 '' | tr ' ' '*'
 echo "Using the ${CLUSTER} cluster"
