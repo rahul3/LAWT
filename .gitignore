@@ -139,3 +139,6 @@ tmp/
 # PyTorch model files
 *.pth
 .pth
+
+observations/
+src/neuralnet/results/icprai_2026/
