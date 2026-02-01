@@ -182,8 +182,8 @@ if __name__ == '__main__':
                         # Create dataset and dataloader
                         dataset = NNMatrixData(n_examples=sample_size+test_size, distribution="gaussian", dim=dim, operation=operation, coeff_lower=-5, coeff_upper=5)
                         train_dataset, test_dataset = random_split(dataset, [sample_size, test_size])   
-                        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=5)
-                        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
+                        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=3)
+                        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=3)
 
                         logger.info(f"Number of training examples: {len(train_dataset)}")
                         logger.info(f"Number of test examples: {len(test_dataset)}")
@@ -307,7 +307,7 @@ if __name__ == '__main__':
                             coeff_lower=-5,
                             coeff_upper=5
                         )
-                        evaluation_loader = DataLoader(evaluation_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
+                        evaluation_loader = DataLoader(evaluation_dataset, batch_size=batch_size, shuffle=False, num_workers=3)
                         
                         tols = [0.05, 0.02, 0.01, 0.005]
                         evaluations_correct = {tol: 0 for tol in tols}
