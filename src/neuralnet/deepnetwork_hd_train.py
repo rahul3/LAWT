@@ -33,7 +33,7 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 # operations_to_run = ["sin", "sign", "cos", "log", "exp"]
-operations_to_run = ["exp"]
+operations_to_run = ["log", "exp"]
 
 for operation in operations_to_run:
     # Generate ID based on current datetime
@@ -87,16 +87,16 @@ for operation in operations_to_run:
             torch.save(test_dataset, os.path.join(test_dim_dir, f'test_dataset_{str(train_sample)}.pt'))
             
             
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=5)
-            test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=3)
+            test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=3)
             
             logger.info(f"Train dataset size: {len(train_dataset)}")
             logger.info(f"Test dataset size: {len(test_dataset)}")
             logger.info("=" * 50)
             
             
-            model = MatrixNet(dim*dim).to(device)
-            # model = DeepMatrixNet(dim*dim).to(device)
+            # model = MatrixNet(dim*dim).to(device)
+            model = DeepMatrixNet(dim*dim).to(device)
             if operation == "exp" or operation == "exponential":
                 criterion = RelativeErrorL1().to(torch.float64)
             else:
@@ -187,7 +187,7 @@ for operation in operations_to_run:
                                                   operation=operation,
                                                   coeff_lower=coeff_lower,
                                                   coeff_upper=coeff_upper)
-                evaluation_loader = DataLoader(evaluation_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
+                evaluation_loader = DataLoader(evaluation_dataset, batch_size=batch_size, shuffle=False, num_workers=3)
                 evaluations_correct = dict()
                 correct_predictions = dict()
                 tols = [0.05, 0.02, 0.01, 0.005]
