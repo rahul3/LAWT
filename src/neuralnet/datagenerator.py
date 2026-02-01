@@ -122,17 +122,23 @@ class ExperimentData(Dataset):
             self.data = q
         elif matrix_type == "toeplitz":
             first_row = torch.randn(n_examples, dim)
+            first_col = torch.randn(n_examples, dim)
             self.data = torch.zeros(n_examples, dim, dim)
             for i in range(dim):
-                self.data[:, i, i:] = first_row[:, :dim-i]
-                self.data[:, i:, i] = first_row[:, :dim-i]
+                for j in range(dim):
+                    if i <= j:
+                        self.data[:, i, j] = first_row[:, j-i]
+                    else:
+                        self.data[:, i, j] = first_col[:, i-j]
         elif matrix_type == "hankel":
             first_row = torch.randn(n_examples, dim)
-            last_col = torch.randn(n_examples, dim-1)
+            last_col = torch.randn(n_examples, dim)
+            # Combine first_row and last_col (excluding duplicate last element of first_row)
+            elements = torch.cat([first_row, last_col[:, 1:]], dim=1)  # shape: (n_examples, 2*dim-1)
             self.data = torch.zeros(n_examples, dim, dim)
             for i in range(dim):
-                self.data[:, i, i:] = first_row[:, :dim-i]
-                self.data[:, i:, i] = torch.cat([first_row[:, i:], last_col[:, :i]], dim=1)
+                for j in range(dim):
+                    self.data[:, i, j] = elements[:, i+j]
         elif matrix_type == "stochastic":
             self.data = torch.abs(self.data)
             self.data = self.data / self.data.sum(dim=-1, keepdim=True)
@@ -148,25 +154,48 @@ class ExperimentData(Dataset):
             a = torch.randn(n_examples, dim, dim)
             self.data = a @ a.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
         elif matrix_type == "m_matrix":
-            self.data = torch.abs(self.data)
-            diag = self.data.sum(dim=-1) + 1
-            self.data = torch.diag(diag) - self.data
+            # M-matrix: non-positive off-diagonal, positive diagonal, with diagonally dominant
+            off_diag = -torch.abs(self.data)
+            # Set diagonal to sum of absolute off-diagonal values in each row plus 1
+            diag_values = torch.abs(off_diag).sum(dim=-1) + 1
+            self.data = off_diag + torch.diag_embed(diag_values)
+            # Zero out the diagonal of off_diag part
+            mask = torch.eye(dim, device=self.data.device).unsqueeze(0).expand_as(self.data)
+            self.data = self.data * (1 - mask) + torch.diag_embed(diag_values) * mask
         elif matrix_type == "p_matrix":
-            self.data = torch.abs(self.data) + torch.eye(dim).unsqueeze(0) * dim
+            # P-matrix: all principal minors are positive
+            # Sufficient condition: symmetric positive definite with positive entries
+            a = torch.abs(torch.randn(n_examples, dim, dim))
+            self.data = a @ a.transpose(-2, -1) + torch.eye(dim).unsqueeze(0) * dim
         elif matrix_type == "z_matrix":
-            self.data = -torch.abs(self.data)
-            diag = torch.abs(self.data).sum(dim=-1)
-            self.data = self.data + torch.diag_embed(diag)
+            # Z-matrix: non-positive off-diagonal entries
+            off_diag = -torch.abs(self.data)
+            # Set diagonal to be positive (sum of absolute values of off-diagonals in row)
+            # First zero out diagonal before summing
+            mask = torch.eye(dim, device=off_diag.device).unsqueeze(0).expand_as(off_diag)
+            off_diag_only = off_diag * (1 - mask)
+            diag_values = torch.abs(off_diag_only).sum(dim=-1) + torch.rand(n_examples, dim)
+            self.data = off_diag_only + torch.diag_embed(diag_values)
         elif matrix_type == "h_matrix":
+            # H-matrix: symmetric, positive diagonal, |h_ii| > sum of |h_ij| for j != i
             a = torch.randn(n_examples, dim, dim)
             h = 0.5 * (a + a.transpose(-2, -1))
-            m = torch.abs(h).sum(dim=-1, keepdim=True) - torch.abs(torch.diag_embed(torch.diagonal(h, dim1=-2, dim2=-1)))
-            self.data = h + m * torch.eye(dim).unsqueeze(0)
+            # Make diagonally dominant
+            off_diag_sum = (torch.abs(h).sum(dim=-1) - torch.abs(torch.diagonal(h, dim1=-2, dim2=-1)))
+            # Set diagonal to be larger than off-diagonal sum
+            diag_values = off_diag_sum + torch.abs(torch.randn(n_examples, dim)) + 1
+            # Keep off-diagonal from h, replace diagonal
+            mask = torch.eye(dim, device=h.device).unsqueeze(0).expand_as(h)
+            self.data = h * (1 - mask) + torch.diag_embed(diag_values) * mask
         elif matrix_type == "hadamard":
             if not (dim and (not(dim & (dim - 1)))):
                 raise ValueError("Dimension must be a power of 2 for Hadamard matrix")
             h = torch.tensor(hadamard(dim), dtype=torch.float32)
             self.data = h.unsqueeze(0).repeat(n_examples, 1, 1)
+            # Add variation via random sign flips per row
+            row_signs = (torch.randint(0, 2, (n_examples, dim, 1)) * 2 - 1).float()
+            col_signs = (torch.randint(0, 2, (n_examples, 1, dim)) * 2 - 1).float()
+            self.data = self.data * row_signs * col_signs
             
         if f_type == "scalar" and operation == "exponential":
             self.target = torch.exp(self.data)
