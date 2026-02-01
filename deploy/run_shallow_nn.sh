@@ -3,7 +3,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=3
 #SBATCH --mem=16G
-#SBATCH --time=1-00:00
+#SBATCH --time=2-00:00
 #SBATCH --mail-user=rahul.padmanabhan@mail.concordia.ca
 #SBATCH --mail-type=ALL
 #SBATCH --output=/home/rahul3/scratch/2026/slurm_output/%x_%j.out
